@@ -1,0 +1,14 @@
+﻿{
+  "platform"    :"mt5",
+  "program_type":"module",
+  "copyright"   :"Copyright 2026, Petros Tamboutsiaris",
+  "link"        :"https:\/\/github.com\/PetrosTam\/xauforge",
+  "version"     :"1.00",
+  "cpu_architecture" :"0",
+  "optimize"    :"1",
+  "fpzerocheck" :"1",
+  "tester_no_cache":"0",
+  "tester_everytick_calculate":"0",
+  "unicode_character_set":"0",
+  "static_libraries":"0"
+}
