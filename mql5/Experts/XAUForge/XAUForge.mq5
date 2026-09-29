@@ -1,10 +1,12 @@
 #include <XAUForge/StrategyEngine.mqh>
 
+input ENUM_TIMEFRAMES SignalTimeframe = PERIOD_H1;
+
 datetime g_lastBarOpenTime = 0;
 
 bool IsNewBar()
 {
-   const datetime currentBarOpenTime = iTime(_Symbol, _Period, 0);
+   const datetime currentBarOpenTime = iTime(_Symbol, SignalTimeframe, 0);
 
    if(currentBarOpenTime == 0)
       return(false);
@@ -21,7 +23,7 @@ int OnInit()
 {
    ResetLastError();
 
-   g_lastBarOpenTime = iTime(_Symbol, _Period, 0);
+   g_lastBarOpenTime = iTime(_Symbol, SignalTimeframe, 0);
 
    if(g_lastBarOpenTime == 0)
    {
