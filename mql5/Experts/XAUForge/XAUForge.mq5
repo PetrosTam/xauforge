@@ -1,3 +1,5 @@
+#include <XAUForge/StrategyEngine.mqh>
+
 datetime g_lastBarOpenTime = 0;
 
 bool IsNewBar()
