@@ -283,3 +283,30 @@ Non-trading balance operations must also be separated from trading performance.
 - Deposits, withdrawals, credits, and other non-trading cash flows adjust the baseline.
 - Restarting or re-attaching the Expert Advisor does not silently reset the daily risk budget.
 - Reaching the loss limit prevents new entries rather than forcing an unexpected position liquidation.
+
+---
+
+## ADR-010 — EMA Baseline Uses Closing Prices with No Shift
+
+**Status:** Accepted
+
+### Context
+
+The EMA20 / EMA50 crossover requires an explicit applied price and moving-average shift when creating MQL5 moving-average indicators.
+
+These parameters must be fixed explicitly so the strategy remains reproducible and does not rely on an undocumented implementation choice.
+
+### Decision
+
+EMA20 and EMA50 use `MODE_EMA`, `PRICE_CLOSE`, and `ma_shift = 0`.
+
+### Rationale
+
+Using unshifted closing-price EMAs provides a simple, conventional, and reproducible baseline without introducing additional strategy parameters.
+
+### Consequences
+
+- EMA20 and EMA50 are calculated from closing prices.
+- Both moving averages use zero graphical/data shift.
+- The crossover definition remains based on completed bars from shift `2 -> 1`.
+- Changing the applied price or moving-average shift is a strategy change and requires explicit review.
