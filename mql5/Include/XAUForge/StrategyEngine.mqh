@@ -270,4 +270,27 @@ bool ReadCompletedStrategyData(
    return(true);
 }
 
+SignalDirection EvaluateSignal(
+   const CompletedStrategyData &data
+)
+{
+   if(
+      data.fastEmaShift2 <= data.slowEmaShift2 &&
+      data.fastEmaShift1 > data.slowEmaShift1
+   )
+   {
+      return(SIGNAL_BUY);
+   }
+
+   if(
+      data.fastEmaShift2 >= data.slowEmaShift2 &&
+      data.fastEmaShift1 < data.slowEmaShift1
+   )
+   {
+      return(SIGNAL_SELL);
+   }
+
+   return(SIGNAL_NONE);
+}
+
 #endif
