@@ -16,6 +16,99 @@ int g_fastEmaHandle = INVALID_HANDLE;
 int g_slowEmaHandle = INVALID_HANDLE;
 int g_atrHandle     = INVALID_HANDLE;
 
+struct CompletedStrategyData
+{
+   double fastEmaShift2;
+   double fastEmaShift1;
+   double slowEmaShift2;
+   double slowEmaShift1;
+   double atrShift1;
+};
+
+bool IsValidIndicatorValue(const double value)
+{
+   return(value != EMPTY_VALUE && MathIsValidNumber(value));
+}
+
+bool IsStrategyDataReady(
+   const string symbol,
+   const ENUM_TIMEFRAMES timeframe
+)
+{
+   if(
+      g_fastEmaHandle == INVALID_HANDLE ||
+      g_slowEmaHandle == INVALID_HANDLE ||
+      g_atrHandle == INVALID_HANDLE
+   )
+   {
+      return(false);
+   }
+
+   long synchronized = 0;
+
+   ResetLastError();
+
+   if(
+      !SeriesInfoInteger(
+         symbol,
+         timeframe,
+         SERIES_SYNCHRONIZED,
+         synchronized
+      )
+   )
+   {
+      PrintFormat(
+         "Failed to query strategy series synchronization. Error: %d",
+         GetLastError()
+      );
+
+      return(false);
+   }
+
+   if(synchronized == 0)
+   {
+      PrintFormat(
+         "Strategy data not ready: %s %s series is not synchronized.",
+         symbol,
+         EnumToString(timeframe)
+      );
+
+      return(false);
+   }
+
+   long barsCount = 0;
+
+   ResetLastError();
+
+   if(
+      !SeriesInfoInteger(
+         symbol,
+         timeframe,
+         SERIES_BARS_COUNT,
+         barsCount
+      )
+   )
+   {
+      return(false);
+   }
+
+   const int requiredBars = SLOW_EMA_PERIOD + 2;
+
+   if(barsCount < requiredBars)
+      return(false);
+
+   if(BarsCalculated(g_fastEmaHandle) < requiredBars)
+      return(false);
+
+   if(BarsCalculated(g_slowEmaHandle) < requiredBars)
+      return(false);
+
+   if(BarsCalculated(g_atrHandle) < requiredBars)
+      return(false);
+
+   return(true);
+}
+
 void ReleaseStrategyIndicators()
 {
    if(g_fastEmaHandle != INVALID_HANDLE)
@@ -103,6 +196,76 @@ bool InitializeStrategyIndicators(
       ReleaseStrategyIndicators();
       return(false);
    }
+
+   return(true);
+}
+
+bool ReadCompletedStrategyData(
+   const string symbol,
+   const ENUM_TIMEFRAMES timeframe,
+   CompletedStrategyData &data
+)
+{
+   if(!IsStrategyDataReady(symbol, timeframe))
+      return(false);
+
+   double fastEmaValues[2];
+   double slowEmaValues[2];
+   double atrValues[1];
+
+   ResetLastError();
+
+   if(CopyBuffer(g_fastEmaHandle, 0, 1, 2, fastEmaValues) != 2)
+   {
+      PrintFormat(
+         "Failed to copy EMA20 completed values. Error: %d",
+         GetLastError()
+      );
+
+      return(false);
+   }
+
+   ResetLastError();
+
+   if(CopyBuffer(g_slowEmaHandle, 0, 1, 2, slowEmaValues) != 2)
+   {
+      PrintFormat(
+         "Failed to copy EMA50 completed values. Error: %d",
+         GetLastError()
+      );
+
+      return(false);
+   }
+
+   ResetLastError();
+
+   if(CopyBuffer(g_atrHandle, 0, 1, 1, atrValues) != 1)
+   {
+      PrintFormat(
+         "Failed to copy ATR14 completed value. Error: %d",
+         GetLastError()
+      );
+
+      return(false);
+   }
+
+   if(
+      !IsValidIndicatorValue(fastEmaValues[0]) ||
+      !IsValidIndicatorValue(fastEmaValues[1]) ||
+      !IsValidIndicatorValue(slowEmaValues[0]) ||
+      !IsValidIndicatorValue(slowEmaValues[1]) ||
+      !IsValidIndicatorValue(atrValues[0])
+   )
+   {
+      return(false);
+   }
+
+   // CopyBuffer places the oldest requested element first.
+   data.fastEmaShift2 = fastEmaValues[0];
+   data.fastEmaShift1 = fastEmaValues[1];
+   data.slowEmaShift2 = slowEmaValues[0];
+   data.slowEmaShift1 = slowEmaValues[1];
+   data.atrShift1     = atrValues[0];
 
    return(true);
 }
