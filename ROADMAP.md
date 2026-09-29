@@ -42,6 +42,8 @@ Exit evidence:
 
 ## Phase 3 — EA Lifecycle
 
+**Status:** Complete
+
 Exit evidence:
 
 - `OnInit`
@@ -160,6 +162,8 @@ Phase 1 is complete.
 
 Phase 2 is complete.
 
-The current milestone is Phase 3 — EA Lifecycle.
+Phase 3 is complete.
 
-The next implementation step is to introduce and understand the Expert Advisor lifecycle through `OnInit`, `OnTick`, `OnDeinit`, and new-bar control flow before strategy logic is added.
+The current milestone is Phase 4 — Strategy Engine.
+
+The next implementation step is to introduce EMA20 / EMA50 crossover signal generation and ATR14 support using an explicit signal timeframe and completed-bar evaluation, without trade execution.
