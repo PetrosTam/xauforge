@@ -18,7 +18,7 @@ Exit evidence:
 
 ## Phase 1 — Repository and Isolated MT5 Environment
 
-**Status:** In progress
+**Status:** Complete
 
 Exit evidence:
 
@@ -32,6 +32,8 @@ Exit evidence:
 - Development environment documented
 
 ## Phase 2 — MQL5 Fundamentals
+
+**Status:** Complete
 
 Exit evidence:
 
@@ -154,8 +156,10 @@ RabbitMQ is introduced only if a real asynchronous workload exists and simpler a
 
 Phase 0 is complete.
 
-Phase 1 is in progress.
+Phase 1 is complete.
 
-The current milestone is to complete the repository foundation and isolated MetaTrader 5 development environment.
+Phase 2 is complete.
 
-No trading logic begins before the repository and development-environment loop is established.
+The current milestone is Phase 3 — EA Lifecycle.
+
+The next implementation step is to introduce and understand the Expert Advisor lifecycle through `OnInit`, `OnTick`, `OnDeinit`, and new-bar control flow before strategy logic is added.
