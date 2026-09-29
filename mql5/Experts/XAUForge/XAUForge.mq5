@@ -35,6 +35,9 @@ int OnInit()
       return(INIT_FAILED);
    }
 
+   if(!InitializeStrategyIndicators(_Symbol, SignalTimeframe))
+      return(INIT_FAILED);
+
    return(INIT_SUCCEEDED);
 }
 
@@ -51,5 +54,7 @@ void OnTick()
 
 void OnDeinit(const int reason)
 {
+   ReleaseStrategyIndicators();
+
    PrintFormat("XAUForge deinitialized. Reason: %d", reason);
 }
