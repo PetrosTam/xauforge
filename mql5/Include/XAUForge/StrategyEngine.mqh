@@ -1,0 +1,11 @@
+#ifndef XAUFORGE_STRATEGY_ENGINE_MQH
+#define XAUFORGE_STRATEGY_ENGINE_MQH
+
+enum SignalDirection
+{
+   SIGNAL_NONE,
+   SIGNAL_BUY,
+   SIGNAL_SELL
+};
+
+#endif
