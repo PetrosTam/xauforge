@@ -71,6 +71,149 @@ bool ReadSymbolDoubleProperty(
    return(false);
 }
 
+bool IsPositiveFiniteSymbolValue(const double value)
+{
+   return(MathIsValidNumber(value) && value > 0.0);
+}
+
+bool ValidateSymbolCapabilities(
+   const SymbolCapabilities &capabilities
+)
+{
+   if(capabilities.symbol == "")
+   {
+      Print("Invalid symbol capabilities: symbol name is empty.");
+      return(false);
+   }
+
+   if(capabilities.digits < 0)
+   {
+      PrintFormat(
+         "Invalid SYMBOL_DIGITS for %s: %d",
+         capabilities.symbol,
+         capabilities.digits
+      );
+
+      return(false);
+   }
+
+   if(!IsPositiveFiniteSymbolValue(capabilities.point))
+   {
+      PrintFormat(
+         "Invalid SYMBOL_POINT for %s: %G",
+         capabilities.symbol,
+         capabilities.point
+      );
+
+      return(false);
+   }
+
+   if(!IsPositiveFiniteSymbolValue(capabilities.tickSize))
+   {
+      PrintFormat(
+         "Invalid SYMBOL_TRADE_TICK_SIZE for %s: %G",
+         capabilities.symbol,
+         capabilities.tickSize
+      );
+
+      return(false);
+   }
+
+   if(
+      !MathIsValidNumber(capabilities.tickValue) ||
+      capabilities.tickValue < 0.0
+   )
+   {
+      PrintFormat(
+         "Invalid SYMBOL_TRADE_TICK_VALUE for %s: %G",
+         capabilities.symbol,
+         capabilities.tickValue
+      );
+
+      return(false);
+   }
+
+   if(!IsPositiveFiniteSymbolValue(capabilities.volumeMin))
+   {
+      PrintFormat(
+         "Invalid SYMBOL_VOLUME_MIN for %s: %G",
+         capabilities.symbol,
+         capabilities.volumeMin
+      );
+
+      return(false);
+   }
+
+   if(!IsPositiveFiniteSymbolValue(capabilities.volumeMax))
+   {
+      PrintFormat(
+         "Invalid SYMBOL_VOLUME_MAX for %s: %G",
+         capabilities.symbol,
+         capabilities.volumeMax
+      );
+
+      return(false);
+   }
+
+   if(capabilities.volumeMax < capabilities.volumeMin)
+   {
+      PrintFormat(
+         "Invalid volume range for %s: min=%G max=%G",
+         capabilities.symbol,
+         capabilities.volumeMin,
+         capabilities.volumeMax
+      );
+
+      return(false);
+   }
+
+   if(!IsPositiveFiniteSymbolValue(capabilities.volumeStep))
+   {
+      PrintFormat(
+         "Invalid SYMBOL_VOLUME_STEP for %s: %G",
+         capabilities.symbol,
+         capabilities.volumeStep
+      );
+
+      return(false);
+   }
+
+   if(capabilities.stopsLevel < 0)
+   {
+      PrintFormat(
+         "Invalid SYMBOL_TRADE_STOPS_LEVEL for %s: %d",
+         capabilities.symbol,
+         capabilities.stopsLevel
+      );
+
+      return(false);
+   }
+
+   if(capabilities.freezeLevel < 0)
+   {
+      PrintFormat(
+         "Invalid SYMBOL_TRADE_FREEZE_LEVEL for %s: %d",
+         capabilities.symbol,
+         capabilities.freezeLevel
+      );
+
+      return(false);
+   }
+
+   if(!IsPositiveFiniteSymbolValue(capabilities.contractSize))
+   {
+      PrintFormat(
+         "Invalid SYMBOL_TRADE_CONTRACT_SIZE for %s: %G",
+         capabilities.symbol,
+         capabilities.contractSize
+      );
+
+      return(false);
+   }
+
+   return(true);
+}
+
 bool LoadSymbolCapabilities(
    const string symbol,
    SymbolCapabilities &capabilities
