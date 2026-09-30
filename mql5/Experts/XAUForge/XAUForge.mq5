@@ -131,6 +131,52 @@ void OnTick()
       data.slowEmaShift1,
       data.atrShift1
    );
+
+   if(signal == SIGNAL_NONE)
+      return;
+
+   MqlTick tick;
+
+   ResetLastError();
+
+   if(!SymbolInfoTick(_Symbol, tick))
+   {
+      PrintFormat(
+         "Failed to read current tick for risk planning. Error: %d",
+         GetLastError()
+      );
+
+      return;
+   }
+
+   const double entryPrice =
+      (signal == SIGNAL_BUY)
+      ? tick.ask
+      : tick.bid;
+
+   RiskTradePlan riskPlan;
+
+   if(!BuildBaselineRiskTradePlan(
+      signal,
+      entryPrice,
+      data.atrShift1,
+      g_riskSettings.riskRewardRatio,
+      riskPlan
+   ))
+   {
+      return;
+   }
+
+   PrintFormat(
+      "Risk plan | signal=%s | entry=%G | ATR14[1]=%G | stop_distance=%G | SL=%G | TP=%G | RR=%G",
+      EnumToString(riskPlan.direction),
+      riskPlan.entryPrice,
+      data.atrShift1,
+      riskPlan.stopDistance,
+      riskPlan.stopLossPrice,
+      riskPlan.takeProfitPrice,
+      g_riskSettings.riskRewardRatio
+   );
 }
 
 void OnDeinit(const int reason)

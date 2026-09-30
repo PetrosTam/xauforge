@@ -1,11 +1,24 @@
 #ifndef XAUFORGE_RISK_MANAGER_MQH
 #define XAUFORGE_RISK_MANAGER_MQH
 
+#include <XAUForge/StrategyEngine.mqh>
+
 struct RiskSettings
 {
    double riskPercent;
    double maxDailyLossPercent;
    double riskRewardRatio;
+};
+
+const double BASELINE_ATR_STOP_MULTIPLIER = 2.0;
+
+struct RiskTradePlan
+{
+   SignalDirection direction;
+   double entryPrice;
+   double stopLossPrice;
+   double takeProfitPrice;
+   double stopDistance;
 };
 
 bool ValidatePositiveFiniteRiskValue(
@@ -50,6 +63,120 @@ bool ValidateRiskSettings(
       settings.riskRewardRatio
    ))
    {
+      return(false);
+   }
+
+   return(true);
+}
+
+bool BuildBaselineRiskTradePlan(
+   const SignalDirection direction,
+   const double entryPrice,
+   const double atrValue,
+   const double riskRewardRatio,
+   RiskTradePlan &plan
+)
+{
+   plan.direction = SIGNAL_NONE;
+   plan.entryPrice = 0.0;
+   plan.stopLossPrice = 0.0;
+   plan.takeProfitPrice = 0.0;
+   plan.stopDistance = 0.0;
+
+   if(
+      direction != SIGNAL_BUY &&
+      direction != SIGNAL_SELL
+   )
+   {
+      PrintFormat(
+         "Cannot build risk trade plan for signal: %s",
+         EnumToString(direction)
+      );
+
+      return(false);
+   }
+
+   if(!ValidatePositiveFiniteRiskValue(
+      "EntryPrice",
+      entryPrice
+   ))
+   {
+      return(false);
+   }
+
+   if(!ValidatePositiveFiniteRiskValue(
+      "ATR",
+      atrValue
+   ))
+   {
+      return(false);
+   }
+
+   if(!ValidatePositiveFiniteRiskValue(
+      "RiskRewardRatio",
+      riskRewardRatio
+   ))
+   {
+      return(false);
+   }
+
+   const double stopDistance =
+      atrValue * BASELINE_ATR_STOP_MULTIPLIER;
+
+   if(!ValidatePositiveFiniteRiskValue(
+      "StopDistance",
+      stopDistance
+   ))
+   {
+      return(false);
+   }
+
+   plan.direction = direction;
+   plan.entryPrice = entryPrice;
+   plan.stopDistance = stopDistance;
+
+   if(direction == SIGNAL_BUY)
+   {
+      plan.stopLossPrice =
+         entryPrice - stopDistance;
+
+      plan.takeProfitPrice =
+         entryPrice + stopDistance * riskRewardRatio;
+   }
+   else
+   {
+      plan.stopLossPrice =
+         entryPrice + stopDistance;
+
+      plan.takeProfitPrice =
+         entryPrice - stopDistance * riskRewardRatio;
+   }
+
+   if(!ValidatePositiveFiniteRiskValue(
+      "StopLossPrice",
+      plan.stopLossPrice
+   ))
+   {
+      plan.direction = SIGNAL_NONE;
+      plan.entryPrice = 0.0;
+      plan.stopLossPrice = 0.0;
+      plan.takeProfitPrice = 0.0;
+      plan.stopDistance = 0.0;
+
+      return(false);
+   }
+
+   if(!ValidatePositiveFiniteRiskValue(
+      "TakeProfitPrice",
+      plan.takeProfitPrice
+   ))
+   {
+      plan.direction = SIGNAL_NONE;
+      plan.entryPrice = 0.0;
+      plan.stopLossPrice = 0.0;
+      plan.takeProfitPrice = 0.0;
+      plan.stopDistance = 0.0;
+
       return(false);
    }
 
