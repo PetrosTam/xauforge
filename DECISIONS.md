@@ -355,3 +355,55 @@ This keeps broker normalization conservative and consistent with the project's s
 - A normalized volume below `SYMBOL_VOLUME_MIN` causes the entry to be rejected.
 - Floating-point tolerances and broker-step boundary behavior must be covered by tests.
 - Broker request and margin validation remain separate later checks and are not replaced by volume normalization.
+
+---
+
+## ADR-012 — Percentage Risk Inputs Use Explicit Percentage Bounds
+
+**Status:** Accepted
+
+### Context
+
+`RiskPercent` is expressed as a percentage of current account equity.
+
+`MaxDailyLossPercent` is expressed as a percentage of the cash-flow-adjusted broker-server-day start-equity baseline.
+
+Both are percentage-valued risk controls, while `RiskRewardRatio` is a positive ratio rather than a percentage.
+
+The project baseline requires risk-management inputs to be validated, but it does not define a narrower strategy-specific maximum for these percentage inputs.
+
+Allowing values above 100% would permit a configured percentage budget greater than the entire current or baseline equity amount.
+
+`RiskRewardRatio` is not an equity percentage, so an arbitrary strategy-specific upper limit is not introduced without evidence.
+
+### Decision
+
+`RiskPercent` must be finite, greater than zero, and no greater than 100%.
+
+`MaxDailyLossPercent` must be finite, greater than zero, and no greater than 100%.
+
+`RiskRewardRatio` must remain finite and greater than zero.
+
+No narrower strategy-specific maximum is introduced without an explicit future risk-policy decision.
+
+### Rationale
+
+The 100% upper bound is a semantic bound for percentage-valued risk controls, not a recommendation to use extreme risk values.
+
+`RiskPercent` is applied to current account equity when calculating planned monetary risk for a prospective trade.
+
+`MaxDailyLossPercent` is applied to the cash-flow-adjusted broker-server-day start-equity baseline when determining whether new entries must be blocked.
+
+The baseline defaults remain `RiskPercent = 1.0`, `MaxDailyLossPercent = 3.0`, and `RiskRewardRatio = 2.0`.
+
+Avoiding an arbitrary upper bound for `RiskRewardRatio` keeps validation limited to requirements justified by the current baseline.
+
+### Consequences
+
+- Non-finite, zero, and negative risk settings are rejected.
+- `RiskPercent` above 100% is rejected.
+- `MaxDailyLossPercent` above 100% is rejected.
+- `RiskRewardRatio` remains positive and finite without an arbitrary strategy-specific upper cap.
+- `RiskPercent` and `MaxDailyLossPercent` share percentage validation but do not share the same calculation baseline.
+- The default risk parameters are unchanged.
+- Any future tightening of these bounds is a risk-policy change and requires explicit review.

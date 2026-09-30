@@ -11,6 +11,7 @@ struct RiskSettings
 };
 
 const double BASELINE_ATR_STOP_MULTIPLIER = 2.0;
+const double MAX_PERCENT_VALUE            = 100.0;
 
 struct RiskTradePlan
 {
@@ -47,11 +48,39 @@ bool ValidatePositiveFiniteRiskValue(
    return(false);
 }
 
+bool ValidatePercentage(
+   const string name,
+   const double value
+)
+{
+   if(!ValidatePositiveFiniteRiskValue(
+      name,
+      value
+   ))
+   {
+      return(false);
+   }
+
+   if(value > MAX_PERCENT_VALUE)
+   {
+      PrintFormat(
+         "Invalid %s: %G. Value must not exceed %G percent.",
+         name,
+         value,
+         MAX_PERCENT_VALUE
+      );
+
+      return(false);
+   }
+
+   return(true);
+}
+
 bool ValidateRiskSettings(
    const RiskSettings &settings
 )
 {
-   if(!ValidatePositiveFiniteRiskValue(
+   if(!ValidatePercentage(
       "RiskPercent",
       settings.riskPercent
    ))
@@ -59,7 +88,7 @@ bool ValidateRiskSettings(
       return(false);
    }
 
-   if(!ValidatePositiveFiniteRiskValue(
+   if(!ValidatePercentage(
       "MaxDailyLossPercent",
       settings.maxDailyLossPercent
    ))
@@ -270,7 +299,7 @@ bool CalculateRawRiskVolume(
       return(false);
    }
 
-   if(!ValidatePositiveFiniteRiskValue(
+   if(!ValidatePercentage(
       "RiskPercent",
       riskPercent
    ))
