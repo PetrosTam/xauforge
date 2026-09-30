@@ -1,6 +1,13 @@
 #ifndef XAUFORGE_SYMBOL_MANAGER_MQH
 #define XAUFORGE_SYMBOL_MANAGER_MQH
 
+enum AccountPositionMode
+{
+   ACCOUNT_POSITION_MODE_UNKNOWN,
+   ACCOUNT_POSITION_MODE_NETTING,
+   ACCOUNT_POSITION_MODE_HEDGING
+};
+
 struct SymbolCapabilities
 {
    string symbol;
@@ -212,6 +219,35 @@ bool ValidateSymbolCapabilities(
    }
 
    return(true);
+}
+
+bool DetectAccountPositionMode(
+   AccountPositionMode &positionMode
+)
+{
+   positionMode = ACCOUNT_POSITION_MODE_UNKNOWN;
+
+   const ENUM_ACCOUNT_MARGIN_MODE marginMode =
+      (ENUM_ACCOUNT_MARGIN_MODE)AccountInfoInteger(ACCOUNT_MARGIN_MODE);
+
+   switch(marginMode)
+   {
+      case ACCOUNT_MARGIN_MODE_RETAIL_NETTING:
+      case ACCOUNT_MARGIN_MODE_EXCHANGE:
+         positionMode = ACCOUNT_POSITION_MODE_NETTING;
+         return(true);
+
+      case ACCOUNT_MARGIN_MODE_RETAIL_HEDGING:
+         positionMode = ACCOUNT_POSITION_MODE_HEDGING;
+         return(true);
+   }
+
+   PrintFormat(
+      "Unsupported ACCOUNT_MARGIN_MODE: %d",
+      (int)marginMode
+   );
+
+   return(false);
 }
 
 bool LoadSymbolCapabilities(
