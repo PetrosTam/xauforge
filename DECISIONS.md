@@ -490,3 +490,57 @@ Writing the valid day marker last provides a simple commit boundary for the pers
 - Strategy Tester global variables are emulated by tester agents and are separate from the live client terminal's global variables.
 - Same-day recovery, new-day initialization, cash-flow reconstruction, and the final daily-loss entry gate remain separate Phase 6 behavior to implement and validate.
 - External persistence infrastructure remains outside the Phase 6 core.
+
+---
+
+## ADR-014 — Daily-Loss Bootstrap Uses a Persistent Initialization Guard
+
+**Status:** Accepted
+
+### Context
+
+A missing persisted daily-loss baseline is ambiguous.
+
+It may represent the first valid XAUForge observation for an account and trade server, or it may represent unexpected state loss after a baseline had already been established for the current broker-server day.
+
+Silently treating every missing baseline as first-time initialization could grant a fresh daily-loss budget after state loss or an interrupted persistence operation.
+
+### Decision
+
+XAUForge will maintain a separate persistent daily-loss initialization guard in the same account/server namespace.
+
+The guard key uses the `.I` suffix and stores the broker-server day identifier in `YYYYMMDD` form.
+
+Before creating a new daily-loss baseline for a server day, XAUForge persists and flushes the initialization guard for that day.
+
+Only after the guard has been persisted does XAUForge persist the daily-loss baseline state.
+
+A valid persisted baseline for the current server day is recovered rather than replaced.
+
+A current-day initialization guard without a valid matching current-day baseline causes fail-safe behavior and must not create a replacement baseline.
+
+An older initialization guard may permit initialization when a genuinely newer broker-server day is observed.
+
+Persisted state or guard values referring to a future server day cause fail-safe behavior.
+
+If a valid same-day baseline exists but the initialization guard is absent or stale, XAUForge may restore the guard from the validated same-day baseline before continuing.
+
+### Rationale
+
+The initialization guard distinguishes ordinary first-time or new-day initialization from a same-day persistence failure.
+
+Writing and flushing the guard before writing the baseline ensures that an interrupted initialization cannot later be mistaken for a legitimate first initialization with a fresh risk budget.
+
+The guard remains native MetaTrader terminal-global state and does not introduce external infrastructure.
+
+### Consequences
+
+- Same-day missing or incomplete baseline state does not silently reset the daily-loss budget.
+- First-ever initialization remains possible when no baseline and no initialization guard exist.
+- A genuine new broker-server day may establish a new baseline when the persisted initialization guard belongs to an older day.
+- Interrupted current-day initialization fails safe.
+- Future-dated persisted state or initialization metadata fails safe.
+- Valid same-day state remains authoritative and is recovered rather than recreated.
+- The initialization guard adds one additional terminal global variable per account/server namespace.
+- Deliberate external deletion of all XAUForge daily-loss terminal globals cannot be distinguished from a never-initialized namespace by the EA alone.
+- Cash-flow reconstruction and the final daily-loss threshold gate remain separate Phase 6 work.
