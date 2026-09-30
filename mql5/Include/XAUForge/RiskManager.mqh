@@ -357,4 +357,174 @@ bool CalculateRawRiskVolume(
    return(true);
 }
 
+bool NormalizeRiskVolumeDown(
+   const double rawVolume,
+   const double volumeMin,
+   const double volumeMax,
+   const double volumeStep,
+   double &normalizedVolume
+)
+{
+   normalizedVolume = 0.0;
+
+   if(!ValidatePositiveFiniteRiskValue(
+      "RawVolume",
+      rawVolume
+   ))
+   {
+      return(false);
+   }
+
+   if(!ValidatePositiveFiniteRiskValue(
+      "VolumeMin",
+      volumeMin
+   ))
+   {
+      return(false);
+   }
+
+   if(!ValidatePositiveFiniteRiskValue(
+      "VolumeMax",
+      volumeMax
+   ))
+   {
+      return(false);
+   }
+
+   if(!ValidatePositiveFiniteRiskValue(
+      "VolumeStep",
+      volumeStep
+   ))
+   {
+      return(false);
+   }
+
+   if(volumeMin > volumeMax)
+   {
+      PrintFormat(
+         "Invalid volume bounds: min=%G exceeds max=%G.",
+         volumeMin,
+         volumeMax
+      );
+
+      return(false);
+   }
+
+   const double cappedVolume =
+      MathMin(rawVolume, volumeMax);
+
+   if(rawVolume > volumeMax)
+   {
+      PrintFormat(
+         "Raw volume %G exceeds broker maximum %G. Capping downward.",
+         rawVolume,
+         volumeMax
+      );
+   }
+
+   const double stepCount =
+      cappedVolume / volumeStep;
+
+   if(!MathIsValidNumber(stepCount))
+   {
+      PrintFormat(
+         "Invalid volume step count for capped volume %G and step %G.",
+         cappedVolume,
+         volumeStep
+      );
+
+      return(false);
+   }
+
+   const double stepTolerance =
+      DBL_EPSILON *
+      MathMax(1.0, MathAbs(stepCount)) *
+      8.0;
+
+   normalizedVolume =
+      MathFloor(stepCount + stepTolerance) *
+      volumeStep;
+
+   if(!MathIsValidNumber(normalizedVolume))
+   {
+      Print(
+         "Volume normalization produced an invalid numeric result."
+      );
+
+      normalizedVolume = 0.0;
+      return(false);
+   }
+
+   const double volumeTolerance =
+      stepTolerance * volumeStep;
+
+   if(
+      normalizedVolume >
+      cappedVolume + volumeTolerance
+   )
+   {
+      PrintFormat(
+         "Normalized volume %G exceeds capped risk volume %G.",
+         normalizedVolume,
+         cappedVolume
+      );
+
+      normalizedVolume = 0.0;
+      return(false);
+   }
+
+   if(
+      normalizedVolume + volumeTolerance <
+      volumeMin
+   )
+   {
+      PrintFormat(
+         "Normalized volume %G is below broker minimum %G.",
+         normalizedVolume,
+         volumeMin
+      );
+
+      normalizedVolume = 0.0;
+      return(false);
+   }
+
+   if(
+      normalizedVolume >
+      volumeMax + volumeTolerance
+   )
+   {
+      PrintFormat(
+         "Normalized volume %G exceeds broker maximum %G.",
+         normalizedVolume,
+         volumeMax
+      );
+
+      normalizedVolume = 0.0;
+      return(false);
+   }
+
+   if(normalizedVolume < volumeMin)
+      normalizedVolume = volumeMin;
+
+   if(normalizedVolume > volumeMax)
+      normalizedVolume = volumeMax;
+
+   if(
+      normalizedVolume >
+      cappedVolume + volumeTolerance
+   )
+   {
+      PrintFormat(
+         "Final normalized volume %G exceeds capped risk volume %G.",
+         normalizedVolume,
+         cappedVolume
+      );
+
+      normalizedVolume = 0.0;
+      return(false);
+   }
+
+   return(true);
+}
+
 #endif

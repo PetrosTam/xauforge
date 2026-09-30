@@ -310,3 +310,48 @@ Using unshifted closing-price EMAs provides a simple, conventional, and reproduc
 - Both moving averages use zero graphical/data shift.
 - The crossover definition remains based on completed bars from shift `2 -> 1`.
 - Changing the applied price or moving-average shift is a strategy change and requires explicit review.
+
+---
+
+## ADR-011 — Broker Volume Normalization Preserves the Risk Ceiling
+
+**Status:** Accepted
+
+### Context
+
+Risk-based position sizing produces a raw trading volume from the planned equity risk and the monetary loss between entry and stop-loss.
+
+Broker rules can constrain that raw volume through minimum volume, maximum volume, and volume step requirements.
+
+The baseline already requires conservative downward normalization to the broker volume step and rejection when the resulting volume is below the broker minimum.
+
+The behavior for a raw volume above the broker maximum also needs to be explicit.
+
+### Decision
+
+Broker volume normalization must never increase the calculated risk volume.
+
+The raw volume is capped downward to `SYMBOL_VOLUME_MAX` when it exceeds the broker maximum.
+
+The capped volume is then rounded downward to `SYMBOL_VOLUME_STEP`.
+
+If the normalized volume is below `SYMBOL_VOLUME_MIN`, the trade is rejected rather than rounded upward to the minimum.
+
+### Rationale
+
+`RiskPercent` defines a planned risk ceiling, not a target that must always be fully consumed.
+
+Reducing volume below the calculated raw volume reduces planned price risk and therefore remains within the risk budget.
+
+Increasing volume to satisfy a broker minimum could exceed the planned risk budget and is therefore not allowed.
+
+This keeps broker normalization conservative and consistent with the project's safe-failure principle.
+
+### Consequences
+
+- Volume normalization never rounds upward.
+- A raw volume above `SYMBOL_VOLUME_MAX` is reduced rather than rejected solely for exceeding the maximum.
+- Actual planned price risk can be lower than the configured risk budget.
+- A normalized volume below `SYMBOL_VOLUME_MIN` causes the entry to be rejected.
+- Floating-point tolerances and broker-step boundary behavior must be covered by tests.
+- Broker request and margin validation remain separate later checks and are not replaced by volume normalization.
