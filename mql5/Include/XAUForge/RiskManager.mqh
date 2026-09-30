@@ -10,8 +10,10 @@ struct RiskSettings
    double riskRewardRatio;
 };
 
-const double BASELINE_ATR_STOP_MULTIPLIER = 2.0;
-const double MAX_PERCENT_VALUE            = 100.0;
+const double BASELINE_ATR_STOP_MULTIPLIER    = 2.0;
+const double MAX_PERCENT_VALUE               = 100.0;
+const double DAILY_LOSS_STATE_SCHEMA_VERSION = 1.0;
+const int MAX_TERMINAL_GLOBAL_NAME_LENGTH    = 63;
 
 struct RiskTradePlan
 {
@@ -29,6 +31,20 @@ struct RiskSizingResult
    double referenceVolume;
    double lossForReferenceVolume;
    double rawVolume;
+};
+
+enum DailyLossStateLoadStatus
+{
+   DAILY_LOSS_STATE_LOAD_NOT_FOUND,
+   DAILY_LOSS_STATE_LOAD_SUCCESS,
+   DAILY_LOSS_STATE_LOAD_INVALID
+};
+
+struct DailyLossState
+{
+   int serverDayId;
+   double dayStartEquity;
+   bool valid;
 };
 
 bool ValidatePositiveFiniteRiskValue(
@@ -105,6 +121,467 @@ bool ValidateRiskSettings(
    }
 
    return(true);
+}
+
+void ResetDailyLossState(
+   DailyLossState &state
+)
+{
+   state.serverDayId = 0;
+   state.dayStartEquity = 0.0;
+   state.valid = false;
+}
+
+bool IsValidServerDayId(
+   const int serverDayId
+)
+{
+   const int year =
+      serverDayId / 10000;
+
+   const int month =
+      (serverDayId / 100) % 100;
+
+   const int day =
+      serverDayId % 100;
+
+   if(
+      year < 1970 ||
+      year > 3000 ||
+      month < 1 ||
+      month > 12 ||
+      day < 1 ||
+      day > 31
+   )
+   {
+      return(false);
+   }
+
+   MqlDateTime candidateDate = {};
+
+   candidateDate.year = year;
+   candidateDate.mon = month;
+   candidateDate.day = day;
+
+   const datetime candidateTime =
+      StructToTime(candidateDate);
+
+   MqlDateTime normalizedDate = {};
+
+   ResetLastError();
+
+   if(!TimeToStruct(
+      candidateTime,
+      normalizedDate
+   ))
+   {
+      PrintFormat(
+         "Failed to validate server day identifier %d. Error: %d",
+         serverDayId,
+         GetLastError()
+      );
+
+      return(false);
+   }
+
+   return(
+      normalizedDate.year == year &&
+      normalizedDate.mon == month &&
+      normalizedDate.day == day
+   );
+}
+
+bool GetCurrentBrokerServerDayId(
+   int &serverDayId
+)
+{
+   serverDayId = 0;
+
+   MqlDateTime serverDate = {};
+
+   ResetLastError();
+
+   const datetime serverTime =
+      TimeCurrent(serverDate);
+
+   if(serverTime <= 0)
+   {
+      PrintFormat(
+         "Failed to obtain broker-server time. Error: %d",
+         GetLastError()
+      );
+
+      return(false);
+   }
+
+   serverDayId =
+      serverDate.year * 10000 +
+      serverDate.mon * 100 +
+      serverDate.day;
+
+   if(!IsValidServerDayId(serverDayId))
+   {
+      PrintFormat(
+         "Invalid broker-server day identifier: %d.",
+         serverDayId
+      );
+
+      serverDayId = 0;
+      return(false);
+   }
+
+   return(true);
+}
+
+bool BuildDailyLossPersistenceKeys(
+   const long accountLogin,
+   const string accountServer,
+   string &versionKey,
+   string &dayKey,
+   string &equityKey
+)
+{
+   versionKey = "";
+   dayKey = "";
+   equityKey = "";
+
+   if(accountLogin <= 0)
+   {
+      PrintFormat(
+         "Invalid account login for daily-loss persistence: %I64d.",
+         accountLogin
+      );
+
+      return(false);
+   }
+
+   if(StringLen(accountServer) == 0)
+   {
+      Print(
+         "Account server is empty for daily-loss persistence."
+      );
+
+      return(false);
+   }
+
+   const string prefix =
+      "XAUForge.DL." +
+      IntegerToString(accountLogin) +
+      "." +
+      accountServer;
+
+   versionKey = prefix + ".V";
+   dayKey = prefix + ".D";
+   equityKey = prefix + ".E";
+
+   if(
+      StringLen(versionKey) >
+         MAX_TERMINAL_GLOBAL_NAME_LENGTH ||
+      StringLen(dayKey) >
+         MAX_TERMINAL_GLOBAL_NAME_LENGTH ||
+      StringLen(equityKey) >
+         MAX_TERMINAL_GLOBAL_NAME_LENGTH
+   )
+   {
+      PrintFormat(
+         "Daily-loss persistence namespace exceeds %d characters.",
+         MAX_TERMINAL_GLOBAL_NAME_LENGTH
+      );
+
+      versionKey = "";
+      dayKey = "";
+      equityKey = "";
+
+      return(false);
+   }
+
+   return(true);
+}
+
+bool SaveDailyLossState(
+   const long accountLogin,
+   const string accountServer,
+   const DailyLossState &state
+)
+{
+   if(!state.valid)
+   {
+      Print(
+         "Cannot persist an invalid daily-loss state."
+      );
+
+      return(false);
+   }
+
+   if(!IsValidServerDayId(state.serverDayId))
+   {
+      PrintFormat(
+         "Cannot persist invalid server day identifier: %d.",
+         state.serverDayId
+      );
+
+      return(false);
+   }
+
+   if(!ValidatePositiveFiniteRiskValue(
+      "DayStartEquity",
+      state.dayStartEquity
+   ))
+   {
+      return(false);
+   }
+
+   string versionKey = "";
+   string dayKey = "";
+   string equityKey = "";
+
+   if(!BuildDailyLossPersistenceKeys(
+      accountLogin,
+      accountServer,
+      versionKey,
+      dayKey,
+      equityKey
+   ))
+   {
+      return(false);
+   }
+
+   // Invalidate the commit marker first. If the process stops while
+   // updating the payload, recovery must see an invalid state.
+   ResetLastError();
+
+   if(
+      GlobalVariableSet(
+         dayKey,
+         0.0
+      ) == 0
+   )
+   {
+      PrintFormat(
+         "Failed to invalidate daily-loss commit marker. Error: %d",
+         GetLastError()
+      );
+
+      return(false);
+   }
+
+   GlobalVariablesFlush();
+
+   ResetLastError();
+
+   if(
+      GlobalVariableSet(
+         equityKey,
+         state.dayStartEquity
+      ) == 0
+   )
+   {
+      PrintFormat(
+         "Failed to persist daily-loss start equity. Error: %d",
+         GetLastError()
+      );
+
+      return(false);
+   }
+
+   ResetLastError();
+
+   if(
+      GlobalVariableSet(
+         versionKey,
+         DAILY_LOSS_STATE_SCHEMA_VERSION
+      ) == 0
+   )
+   {
+      PrintFormat(
+         "Failed to persist daily-loss state version. Error: %d",
+         GetLastError()
+      );
+
+      return(false);
+   }
+
+   // Write the valid day marker last so only a complete payload can
+   // be accepted as committed state.
+   ResetLastError();
+
+   if(
+      GlobalVariableSet(
+         dayKey,
+         (double)state.serverDayId
+      ) == 0
+   )
+   {
+      PrintFormat(
+         "Failed to persist daily-loss server day. Error: %d",
+         GetLastError()
+      );
+
+      return(false);
+   }
+
+   GlobalVariablesFlush();
+
+   return(true);
+}
+
+DailyLossStateLoadStatus LoadDailyLossState(
+   const long accountLogin,
+   const string accountServer,
+   DailyLossState &state
+)
+{
+   ResetDailyLossState(state);
+
+   string versionKey = "";
+   string dayKey = "";
+   string equityKey = "";
+
+   if(!BuildDailyLossPersistenceKeys(
+      accountLogin,
+      accountServer,
+      versionKey,
+      dayKey,
+      equityKey
+   ))
+   {
+      return(DAILY_LOSS_STATE_LOAD_INVALID);
+   }
+
+   const bool hasVersion =
+      GlobalVariableCheck(versionKey);
+
+   const bool hasDay =
+      GlobalVariableCheck(dayKey);
+
+   const bool hasEquity =
+      GlobalVariableCheck(equityKey);
+
+   if(
+      !hasVersion &&
+      !hasDay &&
+      !hasEquity
+   )
+   {
+      return(DAILY_LOSS_STATE_LOAD_NOT_FOUND);
+   }
+
+   if(
+      !hasVersion ||
+      !hasDay ||
+      !hasEquity
+   )
+   {
+      Print(
+         "Daily-loss persistence state is incomplete."
+      );
+
+      return(DAILY_LOSS_STATE_LOAD_INVALID);
+   }
+
+   double versionValue = 0.0;
+   double dayValue = 0.0;
+   double equityValue = 0.0;
+
+   ResetLastError();
+
+   if(!GlobalVariableGet(
+      versionKey,
+      versionValue
+   ))
+   {
+      PrintFormat(
+         "Failed to load daily-loss state version. Error: %d",
+         GetLastError()
+      );
+
+      return(DAILY_LOSS_STATE_LOAD_INVALID);
+   }
+
+   ResetLastError();
+
+   if(!GlobalVariableGet(
+      dayKey,
+      dayValue
+   ))
+   {
+      PrintFormat(
+         "Failed to load daily-loss server day. Error: %d",
+         GetLastError()
+      );
+
+      return(DAILY_LOSS_STATE_LOAD_INVALID);
+   }
+
+   ResetLastError();
+
+   if(!GlobalVariableGet(
+      equityKey,
+      equityValue
+   ))
+   {
+      PrintFormat(
+         "Failed to load daily-loss start equity. Error: %d",
+         GetLastError()
+      );
+
+      return(DAILY_LOSS_STATE_LOAD_INVALID);
+   }
+
+   if(
+      !MathIsValidNumber(versionValue) ||
+      versionValue != DAILY_LOSS_STATE_SCHEMA_VERSION
+   )
+   {
+      PrintFormat(
+         "Unsupported or invalid daily-loss state version: %G.",
+         versionValue
+      );
+
+      return(DAILY_LOSS_STATE_LOAD_INVALID);
+   }
+
+   if(
+      !MathIsValidNumber(dayValue) ||
+      dayValue != MathFloor(dayValue) ||
+      dayValue < 19700101.0 ||
+      dayValue > 30001231.0
+   )
+   {
+      PrintFormat(
+         "Invalid persisted daily-loss server day: %G.",
+         dayValue
+      );
+
+      return(DAILY_LOSS_STATE_LOAD_INVALID);
+   }
+
+   const int persistedDayId =
+      (int)dayValue;
+
+   if(!IsValidServerDayId(persistedDayId))
+   {
+      PrintFormat(
+         "Invalid persisted daily-loss server day: %d.",
+         persistedDayId
+      );
+
+      return(DAILY_LOSS_STATE_LOAD_INVALID);
+   }
+
+   if(!ValidatePositiveFiniteRiskValue(
+      "PersistedDayStartEquity",
+      equityValue
+   ))
+   {
+      return(DAILY_LOSS_STATE_LOAD_INVALID);
+   }
+
+   state.serverDayId = persistedDayId;
+   state.dayStartEquity = equityValue;
+   state.valid = true;
+
+   return(DAILY_LOSS_STATE_LOAD_SUCCESS);
 }
 
 bool BuildBaselineRiskTradePlan(

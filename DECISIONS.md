@@ -407,3 +407,86 @@ Avoiding an arbitrary upper bound for `RiskRewardRatio` keeps validation limited
 - `RiskPercent` and `MaxDailyLossPercent` share percentage validation but do not share the same calculation baseline.
 - The default risk parameters are unchanged.
 - Any future tightening of these bounds is a risk-policy change and requires explicit review.
+
+---
+
+## ADR-013 — Daily-Loss State Uses Terminal Global Variables
+
+**Status:** Accepted
+
+### Context
+
+The daily-loss policy must preserve the original broker-server-day baseline across EA restart or re-attachment.
+
+The persistence mechanism must remain outside ordinary in-memory EA state, must not introduce external infrastructure into the MQL5 core, and must support fail-safe recovery when persisted state is missing, incomplete, incompatible, or invalid.
+
+MetaTrader 5 provides client-terminal global variables as native terminal-managed persistent storage.
+
+These variables are shared across MQL5 programs in the same client terminal and store numeric `double` values. XAUForge therefore requires explicit namespacing, schema validation, and a persistence protocol that prevents partially updated state from being accepted as valid.
+
+### Decision
+
+XAUForge will persist the Phase 6 daily-loss state using MetaTrader 5 client-terminal global variables.
+
+Persisted daily-loss state is namespaced by:
+
+- the XAUForge project identifier,
+- the account login,
+- the trade-server identity.
+
+The persisted baseline state contains:
+
+- a schema version,
+- the broker-server calendar-day identifier,
+- the original valid day-start equity.
+
+The broker-server day is derived from `TimeCurrent()` and represented as `YYYYMMDD`.
+
+Persisted calendar-day values must represent an actual valid calendar date within the supported MQL5 `datetime` range before they are accepted.
+
+Persistence keys must remain within the MetaTrader global-variable name-length limit. An unusable namespace causes safe failure rather than silent truncation or collision.
+
+The broker-server day value acts as the commit marker for the multi-key state.
+
+Before updating an existing persisted state, XAUForge sets the day marker to an invalid value and calls `GlobalVariablesFlush()` before modifying the payload.
+
+The state payload is then written.
+
+The valid broker-server day marker is written last, after the payload, and `GlobalVariablesFlush()` is called again after the completed state has been written.
+
+This protocol ensures that an interrupted update remains detectably invalid rather than appearing to be a successfully committed state with mixed old and new values.
+
+Missing, incomplete, unsupported-version, invalid-date, non-finite, or otherwise invalid persisted state is not accepted as valid recovered state.
+
+### Rationale
+
+Terminal global variables provide native restart-surviving persistence without introducing files, databases, HTTP services, Python, or other external infrastructure into the critical MQL5 core.
+
+Account and trade-server namespacing prevents unrelated trading environments from intentionally sharing the same XAUForge daily-loss state.
+
+Using `TimeCurrent()` keeps the calendar boundary based on broker/server time rather than Windows local time.
+
+Representing the broker-server day as `YYYYMMDD` keeps persisted day identity deterministic, inspectable, and independent of local timezone conversion.
+
+Validating the complete calendar date prevents structurally plausible but impossible values, such as an invalid day for a given month, from being accepted as recovered state.
+
+A small explicit schema makes recovery behavior inspectable and allows future persistence changes to fail safely rather than silently interpreting incompatible state.
+
+Invalidating and flushing the commit marker before modifying the payload prevents an interrupted update from leaving an old valid marker associated with partially updated data.
+
+Writing the valid day marker last provides a simple commit boundary for the persisted multi-key state.
+
+### Consequences
+
+- Daily-loss state is not limited to EA process memory.
+- Persisted values are restricted to the numeric storage supported by terminal global variables.
+- Persistence state is shared at client-terminal scope, so correct namespacing is mandatory.
+- Terminal global-variable names must remain within the platform length limit.
+- Persisted broker-server day values are validated as real calendar dates before use.
+- A save operation invalidates and flushes the commit marker before modifying the payload.
+- A completed save writes the valid day marker last and explicitly flushes the resulting state.
+- An interrupted or partial update remains invalid and must not be treated as successfully recovered state.
+- Missing, incomplete, incompatible, or corrupt persisted state causes safe failure rather than silently creating a replacement baseline.
+- Strategy Tester global variables are emulated by tester agents and are separate from the live client terminal's global variables.
+- Same-day recovery, new-day initialization, cash-flow reconstruction, and the final daily-loss entry gate remain separate Phase 6 behavior to implement and validate.
+- External persistence infrastructure remains outside the Phase 6 core.
