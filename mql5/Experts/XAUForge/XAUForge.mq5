@@ -1,11 +1,18 @@
 #include <XAUForge/StrategyEngine.mqh>
 #include <XAUForge/SymbolManager.mqh>
+#include <XAUForge/RiskManager.mqh>
 
 input ENUM_TIMEFRAMES SignalTimeframe = PERIOD_H1;
+
+input group "Risk Management"
+input double RiskPercent = 1.0;
+input double MaxDailyLossPercent = 3.0;
+input double RiskRewardRatio = 2.0;
 
 datetime g_lastBarOpenTime = 0;
 SymbolCapabilities g_symbolCapabilities;
 AccountPositionMode g_accountPositionMode = ACCOUNT_POSITION_MODE_UNKNOWN;
+RiskSettings g_riskSettings;
 
 bool IsNewBar()
 {
@@ -25,6 +32,13 @@ bool IsNewBar()
 int OnInit()
 {
    ResetLastError();
+
+   g_riskSettings.riskPercent = RiskPercent;
+   g_riskSettings.maxDailyLossPercent = MaxDailyLossPercent;
+   g_riskSettings.riskRewardRatio = RiskRewardRatio;
+
+   if(!ValidateRiskSettings(g_riskSettings))
+      return(INIT_PARAMETERS_INCORRECT);
 
    g_lastBarOpenTime = iTime(_Symbol, SignalTimeframe, 0);
 
