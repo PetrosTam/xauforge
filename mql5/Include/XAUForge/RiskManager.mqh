@@ -21,6 +21,15 @@ struct RiskTradePlan
    double stopDistance;
 };
 
+struct RiskSizingResult
+{
+   double equity;
+   double plannedRiskAmount;
+   double referenceVolume;
+   double lossForReferenceVolume;
+   double rawVolume;
+};
+
 bool ValidatePositiveFiniteRiskValue(
    const string name,
    const double value
@@ -179,6 +188,171 @@ bool BuildBaselineRiskTradePlan(
 
       return(false);
    }
+
+   return(true);
+}
+
+bool CalculateRawRiskVolume(
+   const string symbol,
+   const SignalDirection direction,
+   const double entryPrice,
+   const double stopLossPrice,
+   const double equity,
+   const double riskPercent,
+   const double referenceVolume,
+   RiskSizingResult &result
+)
+{
+   result.equity = 0.0;
+   result.plannedRiskAmount = 0.0;
+   result.referenceVolume = 0.0;
+   result.lossForReferenceVolume = 0.0;
+   result.rawVolume = 0.0;
+
+   if(
+      direction != SIGNAL_BUY &&
+      direction != SIGNAL_SELL
+   )
+   {
+      PrintFormat(
+         "Cannot calculate risk volume for signal: %s",
+         EnumToString(direction)
+      );
+
+      return(false);
+   }
+
+   if(!ValidatePositiveFiniteRiskValue(
+      "EntryPrice",
+      entryPrice
+   ))
+   {
+      return(false);
+   }
+
+   if(!ValidatePositiveFiniteRiskValue(
+      "StopLossPrice",
+      stopLossPrice
+   ))
+   {
+      return(false);
+   }
+
+   if(
+      direction == SIGNAL_BUY &&
+      stopLossPrice >= entryPrice
+   )
+   {
+      Print(
+         "Invalid BUY stop-loss: stop must be below entry price."
+      );
+
+      return(false);
+   }
+
+   if(
+      direction == SIGNAL_SELL &&
+      stopLossPrice <= entryPrice
+   )
+   {
+      Print(
+         "Invalid SELL stop-loss: stop must be above entry price."
+      );
+
+      return(false);
+   }
+
+   if(!ValidatePositiveFiniteRiskValue(
+      "Equity",
+      equity
+   ))
+   {
+      return(false);
+   }
+
+   if(!ValidatePositiveFiniteRiskValue(
+      "RiskPercent",
+      riskPercent
+   ))
+   {
+      return(false);
+   }
+
+   if(!ValidatePositiveFiniteRiskValue(
+      "ReferenceVolume",
+      referenceVolume
+   ))
+   {
+      return(false);
+   }
+
+   const double plannedRiskAmount =
+      equity * (riskPercent / 100.0);
+
+   if(!ValidatePositiveFiniteRiskValue(
+      "PlannedRiskAmount",
+      plannedRiskAmount
+   ))
+   {
+      return(false);
+   }
+
+   const ENUM_ORDER_TYPE orderType =
+      (direction == SIGNAL_BUY)
+      ? ORDER_TYPE_BUY
+      : ORDER_TYPE_SELL;
+
+   double referenceProfit = 0.0;
+
+   ResetLastError();
+
+   if(!OrderCalcProfit(
+      orderType,
+      symbol,
+      referenceVolume,
+      entryPrice,
+      stopLossPrice,
+      referenceProfit
+   ))
+   {
+      PrintFormat(
+         "OrderCalcProfit failed for risk sizing. Error: %d",
+         GetLastError()
+      );
+
+      return(false);
+   }
+
+   const double lossForReferenceVolume =
+      MathAbs(referenceProfit);
+
+   if(!ValidatePositiveFiniteRiskValue(
+      "LossForReferenceVolume",
+      lossForReferenceVolume
+   ))
+   {
+      return(false);
+   }
+
+   const double rawVolume =
+      plannedRiskAmount /
+      lossForReferenceVolume *
+      referenceVolume;
+
+   if(!ValidatePositiveFiniteRiskValue(
+      "RawVolume",
+      rawVolume
+   ))
+   {
+      return(false);
+   }
+
+   result.equity = equity;
+   result.plannedRiskAmount = plannedRiskAmount;
+   result.referenceVolume = referenceVolume;
+   result.lossForReferenceVolume =
+      lossForReferenceVolume;
+   result.rawVolume = rawVolume;
 
    return(true);
 }

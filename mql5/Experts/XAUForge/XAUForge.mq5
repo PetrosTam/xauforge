@@ -177,6 +177,35 @@ void OnTick()
       riskPlan.takeProfitPrice,
       g_riskSettings.riskRewardRatio
    );
+
+   const double equity =
+      AccountInfoDouble(ACCOUNT_EQUITY);
+
+   RiskSizingResult sizingResult;
+
+   if(!CalculateRawRiskVolume(
+      _Symbol,
+      signal,
+      riskPlan.entryPrice,
+      riskPlan.stopLossPrice,
+      equity,
+      g_riskSettings.riskPercent,
+      g_symbolCapabilities.volumeMin,
+      sizingResult
+   ))
+   {
+      return;
+   }
+
+   PrintFormat(
+      "Risk sizing | equity=%G | risk_percent=%G | planned_risk=%G | reference_volume=%G | reference_loss=%G | raw_volume=%G",
+      sizingResult.equity,
+      g_riskSettings.riskPercent,
+      sizingResult.plannedRiskAmount,
+      sizingResult.referenceVolume,
+      sizingResult.lossForReferenceVolume,
+      sizingResult.rawVolume
+   );
 }
 
 void OnDeinit(const int reason)
