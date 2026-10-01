@@ -544,3 +544,79 @@ The guard remains native MetaTrader terminal-global state and does not introduce
 - The initialization guard adds one additional terminal global variable per account/server namespace.
 - Deliberate external deletion of all XAUForge daily-loss terminal globals cannot be distinguished from a never-initialized namespace by the EA alone.
 - Cash-flow reconstruction and the final daily-loss threshold gate remain separate Phase 6 work.
+
+---
+
+## ADR-015 — Daily-Loss Cash Flows Are Reconstructed Cumulatively From Deal History
+
+**Status:** Accepted
+
+### Context
+
+The Phase 6 daily-loss policy measures account-equity drawdown from a broker-server-day baseline while preventing non-trading account funding operations from masquerading as trading profit or loss.
+
+The same daily-loss budget must survive EA restart or re-attachment. An in-memory or increment-only cash-flow counter would not be restart-safe because the same historical deposit, withdrawal, credit, or bonus could be counted again after reconstruction.
+
+The existing persisted daily-loss state therefore needs enough information to distinguish cash flows already reflected when the baseline was captured from qualifying cash flows that occur later in the same broker-server day.
+
+### Decision
+
+XAUForge will reconstruct qualifying non-trading cash flows cumulatively from MetaTrader 5 deal history for the current broker-server calendar day.
+
+The qualifying Phase 6 cash-flow allowlist is:
+
+- `DEAL_TYPE_BALANCE`
+- `DEAL_TYPE_CREDIT`
+- `DEAL_TYPE_BONUS`
+
+Other deal types are not treated as baseline-adjusting cash flows unless a future explicit decision and validation justify adding them.
+
+In particular, charges, corrections, commissions, fees, taxes, interest, swap-related effects, and ordinary trading deals are not silently excluded from the daily-loss result by this cash-flow adjustment.
+
+Cash-flow reconstruction uses broker-server time. The history interval begins at the start of the persisted broker-server calendar day and ends at the captured current server time.
+
+For each qualifying deal, XAUForge uses the signed `DEAL_PROFIT` value and accumulates a cumulative cash-flow total.
+
+The persisted `DailyLossState` stores:
+
+- the broker-server day identifier,
+- the original day-start equity,
+- the cumulative qualifying cash-flow total observed when the baseline was captured.
+
+The persistence schema version is increased from `1.0` to `2.0`.
+
+The cash-flow baseline snapshot is stored under the `.C` terminal-global suffix within the existing account/server namespace.
+
+A later daily-loss calculation will derive post-baseline cash flow as:
+
+`currentCashFlowTotal - cashFlowTotalAtBaseline`
+
+Cash-flow values may be positive, zero, or negative, but must be finite.
+
+History-selection failure, deal-ticket retrieval failure, required deal-property retrieval failure, invalid numeric values, incomplete schema-v2 persistence, or incompatible persisted schema causes safe failure rather than silently estimating or resetting the daily-loss budget.
+
+The existing daily-loss day marker remains the final persistence commit marker.
+
+### Rationale
+
+A cumulative history-derived model is idempotent across restart because reconstruction produces the same cumulative result from the same broker history rather than replaying incremental application events.
+
+Persisting the cumulative cash-flow value that existed when the baseline was captured allows XAUForge to distinguish funding activity already reflected in the original equity baseline from funding activity that occurs afterward.
+
+Using broker-server time keeps the reconstruction boundary consistent with the frozen daily-loss definition.
+
+Using an explicit allowlist avoids treating every non-buy/sell deal as external funding and accidentally removing genuine trading or account costs from the equity-loss gate.
+
+Increasing the schema version makes the additional persisted field explicit and prevents older state from being interpreted as if it contained a valid cash-flow snapshot.
+
+### Consequences
+
+- Same-day cash-flow reconstruction is restart-safe and idempotent.
+- Deposits and withdrawals represented as balance operations can adjust the daily-loss baseline without appearing as trading performance.
+- Credit and bonus operations included by the allowlist are treated as non-trading baseline adjustments.
+- Trading costs and non-allowlisted account operations continue to affect equity and therefore remain visible to the daily-loss gate.
+- Persisted daily-loss state now includes one additional terminal global variable using the `.C` suffix.
+- Existing schema `1.0` daily-loss state is intentionally incompatible with schema `2.0` and must not be silently migrated or accepted.
+- Cash-flow history failures cause fail-safe behavior.
+- `DEAL_TYPE_BALANCE` is a coarse platform category. Broker-specific or exceptional balance operations may represent adjustments other than ordinary deposits or withdrawals, so representative broker validation must verify the classification before real-money use. Ambiguous balance semantics must not be inferred from broker-specific comments without an explicit validated rule.
+- The final cash-flow-adjusted daily-loss percentage calculation and new-entry blocking remain separate Phase 6 work.

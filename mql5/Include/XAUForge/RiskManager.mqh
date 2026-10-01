@@ -12,7 +12,7 @@ struct RiskSettings
 
 const double BASELINE_ATR_STOP_MULTIPLIER    = 2.0;
 const double MAX_PERCENT_VALUE               = 100.0;
-const double DAILY_LOSS_STATE_SCHEMA_VERSION = 1.0;
+const double DAILY_LOSS_STATE_SCHEMA_VERSION = 2.0;
 const int MAX_TERMINAL_GLOBAL_NAME_LENGTH    = 63;
 
 struct RiskTradePlan
@@ -58,6 +58,7 @@ struct DailyLossState
 {
    int serverDayId;
    double dayStartEquity;
+   double cashFlowTotalAtBaseline;
    bool valid;
 };
 
@@ -143,6 +144,7 @@ void ResetDailyLossState(
 {
    state.serverDayId = 0;
    state.dayStartEquity = 0.0;
+   state.cashFlowTotalAtBaseline = 0.0;
    state.valid = false;
 }
 
@@ -247,19 +249,197 @@ bool GetCurrentBrokerServerDayId(
    return(true);
 }
 
+bool IsNonTradingCashFlowDealType(
+   const ENUM_DEAL_TYPE dealType
+)
+{
+   return(
+      dealType == DEAL_TYPE_BALANCE ||
+      dealType == DEAL_TYPE_CREDIT ||
+      dealType == DEAL_TYPE_BONUS
+   );
+}
+
+bool GetServerDayStartTime(
+   const int serverDayId,
+   datetime &serverDayStart
+)
+{
+   serverDayStart = 0;
+
+   if(!IsValidServerDayId(serverDayId))
+   {
+      PrintFormat(
+         "Cannot derive start time for invalid server day: %d.",
+         serverDayId
+      );
+
+      return(false);
+   }
+
+   MqlDateTime serverDate = {};
+
+   serverDate.year = serverDayId / 10000;
+   serverDate.mon = (serverDayId / 100) % 100;
+   serverDate.day = serverDayId % 100;
+
+   serverDayStart =
+      StructToTime(serverDate);
+
+   return(true);
+}
+
+bool CalculateNonTradingCashFlowTotal(
+   const int serverDayId,
+   const datetime toTime,
+   double &cashFlowTotal
+)
+{
+   cashFlowTotal = 0.0;
+
+   datetime serverDayStart = 0;
+
+   if(!GetServerDayStartTime(
+      serverDayId,
+      serverDayStart
+   ))
+   {
+      return(false);
+   }
+
+   if(toTime < serverDayStart)
+   {
+      Print(
+         "Cash-flow history end time precedes the broker-server day start."
+      );
+
+      return(false);
+   }
+
+   ResetLastError();
+
+   if(!HistorySelect(
+      serverDayStart,
+      toTime
+   ))
+   {
+      PrintFormat(
+         "Failed to select deal history for daily-loss cash-flow reconstruction. Error: %d",
+         GetLastError()
+      );
+
+      return(false);
+   }
+
+   const int dealCount =
+      HistoryDealsTotal();
+
+   for(int index = 0; index < dealCount; index++)
+   {
+      ResetLastError();
+
+      const ulong ticket =
+         HistoryDealGetTicket(index);
+
+      if(ticket == 0)
+      {
+         PrintFormat(
+            "Failed to obtain deal ticket at history index %d. Error: %d",
+            index,
+            GetLastError()
+         );
+
+         return(false);
+      }
+
+      long dealTypeValue = 0;
+
+      ResetLastError();
+
+      if(!HistoryDealGetInteger(
+         ticket,
+         DEAL_TYPE,
+         dealTypeValue
+      ))
+      {
+         PrintFormat(
+            "Failed to read deal type for deal %I64u. Error: %d",
+            ticket,
+            GetLastError()
+         );
+
+         return(false);
+      }
+
+      const ENUM_DEAL_TYPE dealType =
+         (ENUM_DEAL_TYPE)dealTypeValue;
+
+      if(!IsNonTradingCashFlowDealType(dealType))
+         continue;
+
+      double dealAmount = 0.0;
+
+      ResetLastError();
+
+      if(!HistoryDealGetDouble(
+         ticket,
+         DEAL_PROFIT,
+         dealAmount
+      ))
+      {
+         PrintFormat(
+            "Failed to read cash-flow amount for deal %I64u. Error: %d",
+            ticket,
+            GetLastError()
+         );
+
+         return(false);
+      }
+
+      if(!MathIsValidNumber(dealAmount))
+      {
+         PrintFormat(
+            "Invalid cash-flow amount for deal %I64u: %G.",
+            ticket,
+            dealAmount
+         );
+
+         return(false);
+      }
+
+      const double updatedTotal =
+         cashFlowTotal + dealAmount;
+
+      if(!MathIsValidNumber(updatedTotal))
+      {
+         Print(
+            "Daily-loss cash-flow total became non-finite."
+         );
+
+         return(false);
+      }
+
+      cashFlowTotal = updatedTotal;
+   }
+
+   return(true);
+}
+
 bool BuildDailyLossPersistenceKeys(
    const long accountLogin,
    const string accountServer,
    string &initializationKey,
    string &versionKey,
    string &dayKey,
-   string &equityKey
+   string &equityKey,
+   string &cashFlowKey
 )
 {
    initializationKey = "";
    versionKey = "";
    dayKey = "";
    equityKey = "";
+   cashFlowKey = "";
 
    if(accountLogin <= 0)
    {
@@ -290,6 +470,7 @@ bool BuildDailyLossPersistenceKeys(
    versionKey = prefix + ".V";
    dayKey = prefix + ".D";
    equityKey = prefix + ".E";
+   cashFlowKey = prefix + ".C";
 
    if(
       StringLen(initializationKey) >
@@ -299,6 +480,8 @@ bool BuildDailyLossPersistenceKeys(
       StringLen(dayKey) >
          MAX_TERMINAL_GLOBAL_NAME_LENGTH ||
       StringLen(equityKey) >
+         MAX_TERMINAL_GLOBAL_NAME_LENGTH ||
+      StringLen(cashFlowKey) >
          MAX_TERMINAL_GLOBAL_NAME_LENGTH
    )
    {
@@ -311,6 +494,7 @@ bool BuildDailyLossPersistenceKeys(
       versionKey = "";
       dayKey = "";
       equityKey = "";
+      cashFlowKey = "";
 
       return(false);
    }
@@ -338,6 +522,7 @@ bool SaveDailyLossInitializationDay(
    string versionKey = "";
    string dayKey = "";
    string equityKey = "";
+   string cashFlowKey = "";
 
    if(!BuildDailyLossPersistenceKeys(
       accountLogin,
@@ -345,7 +530,8 @@ bool SaveDailyLossInitializationDay(
       initializationKey,
       versionKey,
       dayKey,
-      equityKey
+      equityKey,
+      cashFlowKey
    ))
    {
       return(false);
@@ -385,6 +571,7 @@ DailyLossInitializationLoadStatus LoadDailyLossInitializationDay(
    string versionKey = "";
    string dayKey = "";
    string equityKey = "";
+   string cashFlowKey = "";
 
    if(!BuildDailyLossPersistenceKeys(
       accountLogin,
@@ -392,7 +579,8 @@ DailyLossInitializationLoadStatus LoadDailyLossInitializationDay(
       initializationKey,
       versionKey,
       dayKey,
-      equityKey
+      equityKey,
+      cashFlowKey
    ))
    {
       return(DAILY_LOSS_INITIALIZATION_LOAD_INVALID);
@@ -484,10 +672,23 @@ bool SaveDailyLossState(
       return(false);
    }
 
+   if(!MathIsValidNumber(
+      state.cashFlowTotalAtBaseline
+   ))
+   {
+      PrintFormat(
+         "Invalid daily-loss baseline cash-flow total: %G.",
+         state.cashFlowTotalAtBaseline
+      );
+
+      return(false);
+   }
+
    string initializationKey = "";
    string versionKey = "";
    string dayKey = "";
    string equityKey = "";
+   string cashFlowKey = "";
 
    if(!BuildDailyLossPersistenceKeys(
       accountLogin,
@@ -495,7 +696,8 @@ bool SaveDailyLossState(
       initializationKey,
       versionKey,
       dayKey,
-      equityKey
+      equityKey,
+      cashFlowKey
    ))
    {
       return(false);
@@ -533,6 +735,23 @@ bool SaveDailyLossState(
    {
       PrintFormat(
          "Failed to persist daily-loss start equity. Error: %d",
+         GetLastError()
+      );
+
+      return(false);
+   }
+
+   ResetLastError();
+
+   if(
+      GlobalVariableSet(
+         cashFlowKey,
+         state.cashFlowTotalAtBaseline
+      ) == 0
+   )
+   {
+      PrintFormat(
+         "Failed to persist daily-loss baseline cash-flow total. Error: %d",
          GetLastError()
       );
 
@@ -592,6 +811,7 @@ DailyLossStateLoadStatus LoadDailyLossState(
    string versionKey = "";
    string dayKey = "";
    string equityKey = "";
+   string cashFlowKey = "";
 
    if(!BuildDailyLossPersistenceKeys(
       accountLogin,
@@ -599,7 +819,8 @@ DailyLossStateLoadStatus LoadDailyLossState(
       initializationKey,
       versionKey,
       dayKey,
-      equityKey
+      equityKey,
+      cashFlowKey
    ))
    {
       return(DAILY_LOSS_STATE_LOAD_INVALID);
@@ -614,10 +835,14 @@ DailyLossStateLoadStatus LoadDailyLossState(
    const bool hasEquity =
       GlobalVariableCheck(equityKey);
 
+   const bool hasCashFlow =
+      GlobalVariableCheck(cashFlowKey);
+
    if(
       !hasVersion &&
       !hasDay &&
-      !hasEquity
+      !hasEquity &&
+      !hasCashFlow
    )
    {
       return(DAILY_LOSS_STATE_LOAD_NOT_FOUND);
@@ -626,7 +851,8 @@ DailyLossStateLoadStatus LoadDailyLossState(
    if(
       !hasVersion ||
       !hasDay ||
-      !hasEquity
+      !hasEquity ||
+      !hasCashFlow
    )
    {
       Print(
@@ -639,6 +865,7 @@ DailyLossStateLoadStatus LoadDailyLossState(
    double versionValue = 0.0;
    double dayValue = 0.0;
    double equityValue = 0.0;
+   double cashFlowValue = 0.0;
 
    ResetLastError();
 
@@ -679,6 +906,21 @@ DailyLossStateLoadStatus LoadDailyLossState(
    {
       PrintFormat(
          "Failed to load daily-loss start equity. Error: %d",
+         GetLastError()
+      );
+
+      return(DAILY_LOSS_STATE_LOAD_INVALID);
+   }
+
+   ResetLastError();
+
+   if(!GlobalVariableGet(
+      cashFlowKey,
+      cashFlowValue
+   ))
+   {
+      PrintFormat(
+         "Failed to load daily-loss baseline cash-flow total. Error: %d",
          GetLastError()
       );
 
@@ -734,8 +976,20 @@ DailyLossStateLoadStatus LoadDailyLossState(
       return(DAILY_LOSS_STATE_LOAD_INVALID);
    }
 
+   if(!MathIsValidNumber(cashFlowValue))
+   {
+      PrintFormat(
+         "Invalid persisted daily-loss baseline cash-flow total: %G.",
+         cashFlowValue
+      );
+
+      return(DAILY_LOSS_STATE_LOAD_INVALID);
+   }
+
    state.serverDayId = persistedDayId;
    state.dayStartEquity = equityValue;
+   state.cashFlowTotalAtBaseline =
+      cashFlowValue;
    state.valid = true;
 
    return(DAILY_LOSS_STATE_LOAD_SUCCESS);
@@ -769,9 +1023,56 @@ bool InitializeDailyLossStateForDay(
       return(false);
    }
 
-   // Persist the initialization guard first. If baseline persistence
-   // later fails, a restart on the same day must fail safe instead
-   // of silently creating a fresh loss budget.
+   MqlDateTime currentServerDate = {};
+
+   ResetLastError();
+
+   const datetime currentServerTime =
+      TimeCurrent(currentServerDate);
+
+   if(currentServerTime <= 0)
+   {
+      PrintFormat(
+         "Failed to obtain broker-server time for daily-loss initialization. Error: %d",
+         GetLastError()
+      );
+
+      return(false);
+   }
+
+   const int observedServerDayId =
+      currentServerDate.year * 10000 +
+      currentServerDate.mon * 100 +
+      currentServerDate.day;
+
+   if(
+      !IsValidServerDayId(observedServerDayId) ||
+      observedServerDayId != serverDayId
+   )
+   {
+      PrintFormat(
+         "Broker-server day changed during daily-loss initialization. Expected: %d, observed: %d.",
+         serverDayId,
+         observedServerDayId
+      );
+
+      return(false);
+   }
+
+   double cashFlowTotalAtBaseline = 0.0;
+
+   if(!CalculateNonTradingCashFlowTotal(
+      serverDayId,
+      currentServerTime,
+      cashFlowTotalAtBaseline
+   ))
+   {
+      return(false);
+   }
+
+   // Persist the initialization guard only after all baseline inputs are
+   // available. If state persistence then fails, a restart on the same
+   // day must fail safe instead of silently creating a fresh loss budget.
    if(!SaveDailyLossInitializationDay(
       accountLogin,
       accountServer,
@@ -783,6 +1084,8 @@ bool InitializeDailyLossStateForDay(
 
    state.serverDayId = serverDayId;
    state.dayStartEquity = currentEquity;
+   state.cashFlowTotalAtBaseline =
+      cashFlowTotalAtBaseline;
    state.valid = true;
 
    if(!SaveDailyLossState(
