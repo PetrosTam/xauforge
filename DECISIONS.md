@@ -6,6 +6,8 @@ Its purpose is to make important architectural, trading, risk, workflow, and inf
 
 Significant changes to these decisions must be recorded here with their context, decision, rationale, and consequences rather than introduced silently.
 
+Superseded decisions remain in this log. When a later ADR replaces an earlier decision, the earlier decision text is retained and its status points to the superseding ADR so the engineering history remains auditable.
+
 ## Decision Record Format
 
 Each decision uses the following structure:
@@ -106,7 +108,7 @@ A dedicated environment improves isolation and reproducibility while keeping Git
 
 ## ADR-004 — Private Repository During Development
 
-**Status:** Accepted
+**Status:** Superseded by ADR-016
 
 ### Context
 
@@ -129,6 +131,8 @@ Keeping the repository private during development allows the project to mature w
 - Secrets and repository history must be reviewed before publication.
 - Documentation and limitations must be suitable for public viewing before release.
 - The owner manually changes repository visibility.
+
+This visibility-timing decision was later replaced by ADR-016 after the repository owner made the repository public during active development. The security, documentation, licensing, and manual-owner-control principles remain applicable.
 
 ---
 
@@ -184,7 +188,8 @@ The MIT License provides a clear and established licensing model for project-own
 - The repository contains the standard MIT License text.
 - XAUForge-owned source follows the MIT licensing baseline.
 - Third-party dependencies, data, and assets require separate license review.
-- Licensing is reviewed again before public release.
+- Licensing remains part of the formal Public Release Gate.
+- Public repository visibility under ADR-016 does not imply that the formal release-quality licensing review has been completed or waived.
 
 ---
 
@@ -274,13 +279,13 @@ Reaching the daily-loss limit blocks new entries.
 
 The daily risk budget must remain stable for the broker trading day and must not reset because the Expert Advisor restarts.
 
-Non-trading balance operations must also be separated from trading performance.
+Qualifying non-trading funding operations must be separated from trading performance without silently excluding trading-related costs.
 
 ### Consequences
 
 - Floating profit and loss contributes to the daily-loss calculation.
 - Trading costs contribute to the daily-loss calculation.
-- Deposits, withdrawals, credits, and other non-trading cash flows adjust the baseline.
+- Qualifying non-trading cash flows adjust the baseline; the exact allowlist and reconstruction policy are defined by ADR-015.
 - Restarting or re-attaching the Expert Advisor does not silently reset the daily risk budget.
 - Reaching the loss limit prevents new entries rather than forcing an unexpected position liquidation.
 
@@ -426,7 +431,7 @@ These variables are shared across MQL5 programs in the same client terminal and 
 
 ### Decision
 
-XAUForge will persist the Phase 6 daily-loss state using MetaTrader 5 client-terminal global variables.
+XAUForge persists the Phase 6 daily-loss state using MetaTrader 5 client-terminal global variables.
 
 Persisted daily-loss state is namespaced by:
 
@@ -434,11 +439,15 @@ Persisted daily-loss state is namespaced by:
 - the account login,
 - the trade-server identity.
 
-The persisted baseline state contains:
+The base persistence protocol stores:
 
 - a schema version,
 - the broker-server calendar-day identifier,
 - the original valid day-start equity.
+
+ADR-014 later adds a separate `.I` initialization guard for same-day bootstrap safety.
+
+ADR-015 later extends the persisted state to schema version `2.0` by adding the cumulative qualifying cash-flow total observed at baseline under the `.C` suffix.
 
 The broker-server day is derived from `TimeCurrent()` and represented as `YYYYMMDD`.
 
@@ -456,7 +465,9 @@ The valid broker-server day marker is written last, after the payload, and `Glob
 
 This protocol ensures that an interrupted update remains detectably invalid rather than appearing to be a successfully committed state with mixed old and new values.
 
-Missing, incomplete, unsupported-version, invalid-date, non-finite, or otherwise invalid persisted state is not accepted as valid recovered state.
+Missing, incomplete, unsupported-version, invalid-date, non-finite, or otherwise invalid persisted state is never accepted as valid recovered state.
+
+Whether a fresh current-day baseline may be initialized after missing or invalid persistence is governed by the bootstrap rules in ADR-014; same-day state loss after initialization has begun must fail safe.
 
 ### Rationale
 
@@ -486,9 +497,9 @@ Writing the valid day marker last provides a simple commit boundary for the pers
 - A save operation invalidates and flushes the commit marker before modifying the payload.
 - A completed save writes the valid day marker last and explicitly flushes the resulting state.
 - An interrupted or partial update remains invalid and must not be treated as successfully recovered state.
-- Missing, incomplete, incompatible, or corrupt persisted state causes safe failure rather than silently creating a replacement baseline.
+- Missing, incomplete, incompatible, or corrupt state is not accepted as recovered state; bootstrap/replacement behavior follows ADR-014.
 - Strategy Tester global variables are emulated by tester agents and are separate from the live client terminal's global variables.
-- Same-day recovery, new-day initialization, cash-flow reconstruction, and the final daily-loss entry gate remain separate Phase 6 behavior to implement and validate.
+- Same-day recovery, new-day initialization, cash-flow reconstruction, and the daily-loss entry gate remain separate responsibilities from the persistence mechanism and are implemented and validated independently in Phase 6.
 - External persistence infrastructure remains outside the Phase 6 core.
 
 ---
@@ -507,7 +518,7 @@ Silently treating every missing baseline as first-time initialization could gran
 
 ### Decision
 
-XAUForge will maintain a separate persistent daily-loss initialization guard in the same account/server namespace.
+XAUForge maintains a separate persistent daily-loss initialization guard in the same account/server namespace.
 
 The guard key uses the `.I` suffix and stores the broker-server day identifier in `YYYYMMDD` form.
 
@@ -543,7 +554,7 @@ The guard remains native MetaTrader terminal-global state and does not introduce
 - Valid same-day state remains authoritative and is recovered rather than recreated.
 - The initialization guard adds one additional terminal global variable per account/server namespace.
 - Deliberate external deletion of all XAUForge daily-loss terminal globals cannot be distinguished from a never-initialized namespace by the EA alone.
-- Cash-flow reconstruction and the final daily-loss threshold gate remain separate Phase 6 work.
+- Cash-flow reconstruction and the daily-loss threshold gate remain separate responsibilities from bootstrap/recovery and are implemented and validated independently in Phase 6.
 
 ---
 
@@ -561,7 +572,7 @@ The existing persisted daily-loss state therefore needs enough information to di
 
 ### Decision
 
-XAUForge will reconstruct qualifying non-trading cash flows cumulatively from MetaTrader 5 deal history for the current broker-server calendar day.
+XAUForge reconstructs qualifying non-trading cash flows cumulatively from MetaTrader 5 deal history for the current broker-server calendar day.
 
 The qualifying Phase 6 cash-flow allowlist is:
 
@@ -583,11 +594,11 @@ The persisted `DailyLossState` stores:
 - the original day-start equity,
 - the cumulative qualifying cash-flow total observed when the baseline was captured.
 
-The persistence schema version is increased from `1.0` to `2.0`.
+The persistence schema version is `2.0`.
 
 The cash-flow baseline snapshot is stored under the `.C` terminal-global suffix within the existing account/server namespace.
 
-A later daily-loss calculation will derive post-baseline cash flow as:
+Daily-loss evaluation derives post-baseline cash flow as:
 
 `currentCashFlowTotal - cashFlowTotalAtBaseline`
 
@@ -615,8 +626,175 @@ Increasing the schema version makes the additional persisted field explicit and 
 - Deposits and withdrawals represented as balance operations can adjust the daily-loss baseline without appearing as trading performance.
 - Credit and bonus operations included by the allowlist are treated as non-trading baseline adjustments.
 - Trading costs and non-allowlisted account operations continue to affect equity and therefore remain visible to the daily-loss gate.
-- Persisted daily-loss state now includes one additional terminal global variable using the `.C` suffix.
+- Persisted daily-loss state includes one additional terminal global variable using the `.C` suffix.
 - Existing schema `1.0` daily-loss state is intentionally incompatible with schema `2.0` and must not be silently migrated or accepted.
 - Cash-flow history failures cause fail-safe behavior.
 - `DEAL_TYPE_BALANCE` is a coarse platform category. Broker-specific or exceptional balance operations may represent adjustments other than ordinary deposits or withdrawals, so representative broker validation must verify the classification before real-money use. Ambiguous balance semantics must not be inferred from broker-specific comments without an explicit validated rule.
-- The final cash-flow-adjusted daily-loss percentage calculation and new-entry blocking remain separate Phase 6 work.
+- Cash-flow reconstruction remains a separate responsibility from the daily-loss percentage calculation and new-entry gate; those calculations are implemented and validated elsewhere in the Phase 6 RiskManager flow.
+
+---
+
+## ADR-016 — Repository Visibility Is Public During Active Development
+
+**Status:** Accepted
+
+### Context
+
+ADR-004 originally required the `xauforge` repository to remain private throughout active development and to become public only after the formal Public Release Gate passed.
+
+During Phase 6, the repository owner manually changed the repository to public before the full roadmap and formal Public Release Gate were complete so that XAUForge could be used as verifiable work-in-progress portfolio evidence for job applications.
+
+The repository is therefore public while active development continues.
+
+After the repository became public, and before relying on it as portfolio evidence, a focused current-tree and Git-history safety audit was performed. The inspected repository contained no tracked `.env`, `.log`, or `.ex5` files; no terminal runtime/config/history/cache directories; no obvious credential assignments or personal `C:\Users\...` paths in the current tree; and no matching sensitive artifact paths, credential-pattern content, or personal Windows user paths in the inspected Git history.
+
+This audit is evidence for the inspected categories, not a guarantee that arbitrary future commits cannot introduce sensitive information.
+
+### Decision
+
+The `xauforge` repository may remain public while active development continues.
+
+This decision supersedes ADR-004 only with respect to the timing requirement that public visibility must wait until the formal Public Release Gate has passed.
+
+Repository visibility remains a manual owner decision and is never changed automatically.
+
+Public visibility does not mean that XAUForge is complete, production-ready, validated for real-money use, or through the formal Public Release Gate.
+
+The formal Public Release Gate remains an active release-quality checklist covering security/history review, recruiter-ready documentation, licensing, reproducible evidence, limitations/disclaimers, and honest performance claims.
+
+### Rationale
+
+A public work-in-progress repository provides verifiable portfolio evidence for current job applications and allows reviewers to inspect the actual engineering process, commit history, documentation, and implementation.
+
+Keeping the repository state, README, roadmap, and decision log factually consistent is preferable to leaving an accepted private-repository decision that no longer matches reality.
+
+Preserving the formal Public Release Gate as a quality gate keeps the original security, licensing, reproducibility, and honesty requirements in force even though repository visibility changed earlier than originally planned.
+
+### Consequences
+
+- ADR-004 is superseded for repository-visibility timing.
+- The repository is publicly accessible while XAUForge development continues.
+- Public visibility must not be interpreted as project completion, production readiness, real-money readiness, or evidence of profitability.
+- README and project documentation must clearly distinguish implemented, validated, planned, and incomplete functionality.
+- Secrets, broker credentials, account configuration, `.env` values, terminal runtime state, private notes, logs, and generated `.ex5` binaries remain prohibited from normal Git history.
+- Because pushed commits and feature branches can become publicly visible immediately, secret/history hygiene is an ongoing requirement rather than a one-time publication task.
+- If sensitive credentials are ever exposed, credential rotation takes priority; deleting the current file alone is not sufficient if the value exists in Git history.
+- MIT licensing remains the baseline for XAUForge-owned source, while third-party licensing remains independent and subject to review.
+- The formal Public Release Gate remains required before XAUForge is described as release-ready or fully validated.
+- Repository visibility changes remain manual owner actions; no automation may make the repository public or private.
+
+---
+
+## ADR-017 — Position Sizing Uses Planned Equity Risk and Account-Currency Stop-Loss Evaluation
+
+**Status:** Accepted
+
+### Context
+
+XAUForge needs a position-sizing method that expresses trade risk as a percentage of account equity without relying on hard-coded assumptions about XAUUSD pip value, contract value, tick value, account currency, or broker-specific symbol conventions.
+
+The calculated risk budget is a planned price-risk budget. It is not a guarantee of the maximum realized loss because slippage, gaps, commissions, swap, fees, execution delay, and other broker or market effects can change the final realized P/L.
+
+The initial strategy baseline also requires an explicit stop-distance and risk/reward model so sizing behavior remains reproducible and explainable.
+
+### Decision
+
+The baseline per-trade planned risk is calculated from current account equity:
+
+`planned_risk_amount = equity * (RiskPercent / 100)`
+
+The default `RiskPercent` is `1.0`.
+
+The baseline stop distance is:
+
+`ATR14 * 2.0`
+
+The baseline `RiskRewardRatio` is `2.0`.
+
+Position sizing uses the supplied candidate entry price and stop-loss price.
+
+XAUForge uses `OrderCalcProfit()` to estimate the account-currency profit/loss for a valid reference volume between the supplied entry and stop prices.
+
+The absolute reference loss is used to scale the reference volume to the planned monetary risk:
+
+`raw_volume = planned_risk_amount / loss_for_reference_volume * reference_volume`
+
+XAUForge does not hard-code a gold pip-value or monetary-per-point assumption.
+
+If the reference loss cannot be evaluated, is non-finite, or is not strictly positive, sizing fails safely and the candidate entry is rejected.
+
+Broker-volume normalization is a separate step governed by ADR-011.
+
+Final broker stop/freeze validation, independent margin/request validation, and `OrderCheck` belong to Phase 7. If Phase 7 broker pre-flight changes the final entry-to-stop distance, position sizing must be recalculated from that final distance before `OrderCheck`.
+
+### Rationale
+
+`OrderCalcProfit()` evaluates the supplied trade parameters in the actual symbol/account environment and returns the estimated P/L in account currency.
+
+Using the actual entry-to-stop move avoids embedding broker-specific XAUUSD value assumptions in the risk formula.
+
+Basing the monetary budget on current equity makes the planned risk scale with the account while keeping the configured percentage explicit.
+
+Keeping baseline risk geometry in Phase 6 and final broker pre-flight in Phase 7 preserves the separation between risk calculation and broker-valid execution.
+
+### Consequences
+
+- The default planned trade-risk budget is 1% of current account equity.
+- Planned price risk is explicitly distinguished from guaranteed realized maximum loss.
+- The baseline stop distance is ATR14 multiplied by `2.0`.
+- The baseline risk/reward ratio is `2.0`.
+- BUY and SELL sizing use their respective supplied entry and stop prices.
+- Account-currency loss estimation is delegated to `OrderCalcProfit()` rather than a hard-coded XAUUSD pip-value formula.
+- Invalid or unusable sizing inputs fail safely.
+- Raw sizing can change whenever the supplied entry-to-stop distance changes.
+- Broker-volume normalization remains governed by ADR-011.
+- A broker-driven SL adjustment in Phase 7 requires re-sizing before `OrderCheck`.
+- Changing the risk basis, ATR stop multiplier, or sizing method is a risk-policy change and requires explicit review.
+
+---
+
+## ADR-018 — EMA Crossover Uses Explicit Equality Semantics
+
+**Status:** Accepted
+
+### Context
+
+ADR-007 fixes the crossover evaluation to completed bars from shift `2` to shift `1`, and ADR-010 fixes the EMA calculation to unshifted closing-price EMA20 and EMA50.
+
+The exact comparison operators are also part of the strategy definition. Without an explicit rule, changing equality handling could alter signal timing and therefore change backtest and forward-validation results without an obvious strategy decision.
+
+### Decision
+
+The baseline BUY crossover is:
+
+`EMA20[2] <= EMA50[2] && EMA20[1] > EMA50[1]`
+
+The baseline SELL crossover is:
+
+`EMA20[2] >= EMA50[2] && EMA20[1] < EMA50[1]`
+
+Equality is therefore permitted on shift `2`, the earlier completed bar.
+
+Shift `1`, the most recent completed bar, must show a strict relationship in the new direction.
+
+If EMA20 and EMA50 are equal on shift `1`, no crossover signal is produced.
+
+The baseline uses direct indicator-value comparisons and does not introduce an additional crossover epsilon/tolerance.
+
+### Rationale
+
+Allowing equality on shift `2` recognizes a valid transition where the two EMAs were equal on the earlier completed bar and then separated into a new direction on shift `1`.
+
+Requiring a strict relationship on shift `1` prevents equality on the most recent completed bar from being treated as a completed bullish or bearish cross.
+
+Making these operators explicit ensures that signal semantics are reproducible and reviewable rather than hidden inside implementation details.
+
+### Consequences
+
+- BUY requires the fast EMA to be at or below the slow EMA on shift `2` and strictly above it on shift `1`.
+- SELL requires the fast EMA to be at or above the slow EMA on shift `2` and strictly below it on shift `1`.
+- Equality on shift `1` produces `SIGNAL_NONE`.
+- Bar `0` remains excluded from signal generation under ADR-007.
+- EMA calculation remains `MODE_EMA`, `PRICE_CLOSE`, and `ma_shift = 0` under ADR-010.
+- Changing the crossover comparison operators or introducing a comparison tolerance is a strategy change and requires explicit review.
+- Future regression and backtest baselines must treat these crossover semantics as part of the strategy definition.
