@@ -53,6 +53,8 @@ Exit evidence:
 
 ## Phase 4 — Strategy Engine
 
+**Status:** Complete
+
 Exit evidence:
 
 - EMA20 and EMA50 crossover signal generation
@@ -63,29 +65,42 @@ Exit evidence:
 
 ## Phase 5 — Symbol and Account Capabilities
 
+**Status:** Complete
+
 Exit evidence:
 
 - Broker symbol rules handled
 - Account capabilities inspected
 - Netting and hedging mode detected
-- Ownership ambiguity handled safely
+- Ownership ambiguity identified as a fail-safe condition for later ownership enforcement
 
 ## Phase 6 — Risk Manager
+
+**Status:** In Review
 
 Exit evidence:
 
 - Planned percentage equity risk sizing
-- Conservative volume normalization
-- Broker-valid SL and TP handling
-- Daily-loss baseline
-- Restart-safe daily-loss recovery
+- ATR-based baseline SL/TP planning
+- `OrderCalcProfit`-based sizing in account currency
+- Conservative broker-volume normalization
+- Rejection when normalized volume falls below `SYMBOL_VOLUME_MIN`
+- Broker-server-day daily-loss baseline
+- Cash-flow-adjusted daily-loss evaluation
+- Restart-safe daily-loss persistence and recovery
+- New-entry daily-loss gate
+- Compile, deterministic behavior, and runtime recovery evidence
 
 ## Phase 7 — Trade Manager
 
 Exit evidence:
 
-- Synchronous broker-valid trade submission
+- Dynamic pre-trade broker validation
+- Broker stop constraints re-checked before submission
+- Risk sizing recalculated if the final stop distance must change
+- Independent margin and request validation
 - `OrderCheck`
+- Synchronous broker-valid trade submission
 - Immediate trade retcode handling
 
 ## Phase 8 — Trade Lifecycle
@@ -94,6 +109,7 @@ Exit evidence:
 
 - Orders, deals, and positions modeled correctly
 - XAUForge position ownership rules enforced
+- Maximum one XAUForge position initially
 
 ## Phase 9 — Transaction Tracking
 
@@ -156,14 +172,12 @@ RabbitMQ is introduced only if a real asynchronous workload exists and simpler a
 
 ## Current Position
 
-Phase 0 is complete.
+Phases 0 through 5 are complete.
 
-Phase 1 is complete.
+Phase 6 — Risk Manager is in review.
 
-Phase 2 is complete.
+The Phase 6 implementation now covers planned percentage-equity risk, ATR-based baseline SL/TP planning, `OrderCalcProfit`-based position sizing, conservative broker-volume normalization, and restart-safe cash-flow-adjusted daily-loss gates.
 
-Phase 3 is complete.
+The remaining Phase 6 work is documentation alignment, full branch review, pull-request validation, merge, and branch cleanup.
 
-The current milestone is Phase 4 — Strategy Engine.
-
-The next implementation step is to introduce EMA20 / EMA50 crossover signal generation and ATR14 support using an explicit signal timeframe and completed-bar evaluation, without trade execution.
+Phase 7 — Trade Manager has not started. Dynamic pre-trade validation, broker stop-constraint enforcement, margin/request validation, `OrderCheck`, and actual order submission remain Phase 7 work.
