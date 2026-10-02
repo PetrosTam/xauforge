@@ -2,6 +2,8 @@
 
 XAUForge uses a dedicated MetaTrader 5 installation in portable mode while keeping the Git repository as the source of truth for project-controlled source code.
 
+This document describes the verified local development/build environment. It does not define trading strategy, risk policy, or execution behavior; those responsibilities are documented elsewhere.
+
 ## Verified Environment
 
 The current development workflow has been verified with:
@@ -74,7 +76,12 @@ mql5\
 │       └── XAUForge.mqproj
 └── Include\
     └── XAUForge\
+        ├── StrategyEngine.mqh
+        ├── SymbolManager.mqh
+        └── RiskManager.mqh
 ```
+
+This tree reflects the current repository state after Phase 6. Later roadmap files are not created early merely because they appear in the target repository structure.
 
 The repository is the authoritative location for project-controlled source, configuration, scripts, and documentation.
 
@@ -139,19 +146,19 @@ The project is configured as an Expert Advisor and currently uses:
 - No Optimization during active development,
 - floating-point divider checks enabled.
 
-The project includes:
+The project uses:
 
 ```text
 XAUForge.mq5
 ```
 
-as a relative compile target.
+as the relative compile target. Project headers are reached through the MQL5 include path and repository-to-MT5 linkage.
 
 The `.mqproj` file is the project-level build definition. Project-controlled build settings should not be duplicated inconsistently in source files.
 
-## Minimal Compile Target
+## Initial Compile-Loop Baseline
 
-The current minimal Expert Advisor source is intentionally small:
+During the Phase 1 / Phase 2 environment bootstrap, the build loop was intentionally verified with a minimal Expert Advisor:
 
 ```mql5
 int OnInit()
@@ -160,9 +167,11 @@ int OnInit()
 }
 ```
 
-Its purpose is to validate the development and build loop before any trading logic is introduced.
+That snippet is historical bootstrap evidence, not the current `XAUForge.mq5` implementation.
 
-Trading strategy, risk management, trade execution, and lifecycle behavior are outside the scope of this environment milestone.
+The current EA has progressed through lifecycle, strategy, symbol/account capability, and RiskManager phases while retaining the same verified repository-to-MT5 build path.
+
+The purpose of the original minimal target was to prove the development/build loop before trading behavior was introduced.
 
 ## Command-Line Build
 
@@ -261,25 +270,30 @@ After restoring the source, the same wrapper successfully rebuilt the project wi
 0 errors, 0 warnings
 ```
 
-This verifies both the success path and the compile-failure rejection path.
+The same compile gate continued to pass after the Phase 6 RiskManager implementation was merged.
+
+This verifies both the success path and the compile-failure rejection path while keeping the build workflow stable as the EA grows.
 
 ## Development Workflow
 
-For environment-level MQL5 work:
+For MQL5 work:
 
 1. Work from the Git repository.
 2. Edit project-controlled source in the repository tree.
 3. Run `scripts/setup-mt5.ps1` when the local MT5 linkage must be created or verified.
-4. Run `scripts/build-mql5.ps1`.
+4. Run `scripts/build-mql5.ps1` when MQL5 source or project build behavior is affected.
 5. Require 0 errors and 0 warnings.
-6. Review `git status`.
-7. Review the relevant diff.
-8. Stage only the intended paths.
-9. Review the staged diff.
-10. Run the relevant validation again when necessary.
-11. Create one atomic Conventional Commit for the logical change.
+6. Run the relevant logic / Strategy Tester / regression validation for the current phase.
+7. Review `git status`.
+8. Review the relevant diff.
+9. Stage only the intended paths.
+10. Review the staged diff.
+11. Run the relevant validation again when necessary.
+12. Create one atomic Conventional Commit for the logical change.
 
 Manual MetaEditor compilation can still be useful during development, but the PowerShell wrapper provides the repeatable repository-level build path.
+
+Documentation-only changes do not require an MQL5 rebuild unless the documentation claim itself depends on a newly observed build result.
 
 ## Git Safety Rules
 
