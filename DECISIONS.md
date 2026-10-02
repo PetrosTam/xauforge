@@ -112,7 +112,7 @@ A dedicated environment improves isolation and reproducibility while keeping Git
 
 ### Context
 
-XAUForge requires development, testing, documentation, licensing review, reproducibility evidence, and repository cleanup before it is suitable for public portfolio use.
+XAUForge requires development, testing, documentation, licensing review, reproducibility evidence, and repository cleanup before it is suitable for formal public release.
 
 ### Decision
 
@@ -642,11 +642,11 @@ Increasing the schema version makes the additional persisted field explicit and 
 
 ADR-004 originally required the `xauforge` repository to remain private throughout active development and to become public only after the formal Public Release Gate passed.
 
-During Phase 6, the repository owner manually changed the repository to public before the full roadmap and formal Public Release Gate were complete so that XAUForge could be used as verifiable work-in-progress portfolio evidence for job applications.
+During Phase 6, the repository owner manually changed the repository to public before the full roadmap and formal Public Release Gate were complete so that active development could be inspected publicly while the project remained explicitly work in progress.
 
 The repository is therefore public while active development continues.
 
-After the repository became public, and before relying on it as portfolio evidence, a focused current-tree and Git-history safety audit was performed. The inspected repository contained no tracked `.env`, `.log`, or `.ex5` files; no terminal runtime/config/history/cache directories; no obvious credential assignments or personal `C:\Users\...` paths in the current tree; and no matching sensitive artifact paths, credential-pattern content, or personal Windows user paths in the inspected Git history.
+After the repository became public, a focused current-tree and Git-history safety audit was performed. The inspected repository contained no tracked `.env`, `.log`, or `.ex5` files; no terminal runtime/config/history/cache directories; no obvious credential assignments or personal `C:\Users\...` paths in the current tree; and no matching sensitive artifact paths, credential-pattern content, or personal Windows user paths in the inspected Git history.
 
 This audit is evidence for the inspected categories, not a guarantee that arbitrary future commits cannot introduce sensitive information.
 
@@ -660,11 +660,11 @@ Repository visibility remains a manual owner decision and is never changed autom
 
 Public visibility does not mean that XAUForge is complete, production-ready, validated for real-money use, or through the formal Public Release Gate.
 
-The formal Public Release Gate remains an active release-quality checklist covering security/history review, recruiter-ready documentation, licensing, reproducible evidence, limitations/disclaimers, and honest performance claims.
+The formal Public Release Gate remains an active release-quality checklist covering security/history review, public-facing documentation, licensing, reproducible evidence, limitations/disclaimers, and honest performance claims.
 
 ### Rationale
 
-A public work-in-progress repository provides verifiable portfolio evidence for current job applications and allows reviewers to inspect the actual engineering process, commit history, documentation, and implementation.
+A public work-in-progress repository allows reviewers to inspect the actual engineering process, commit history, documentation, and implementation while development continues.
 
 Keeping the repository state, README, roadmap, and decision log factually consistent is preferable to leaving an accepted private-repository decision that no longer matches reality.
 
@@ -798,3 +798,38 @@ Making these operators explicit ensures that signal semantics are reproducible a
 - EMA calculation remains `MODE_EMA`, `PRICE_CLOSE`, and `ma_shift = 0` under ADR-010.
 - Changing the crossover comparison operators or introducing a comparison tolerance is a strategy change and requires explicit review.
 - Future regression and backtest baselines must treat these crossover semantics as part of the strategy definition.
+---
+
+## ADR-019 — Public Project Records Use Engineering and Release-Readiness Framing
+
+**Status:** Accepted
+
+### Context
+
+The project roadmap defines a final Phase 18 around public-release and presentation readiness.
+
+The repository is now public during active development. Public project records should describe engineering state, validation evidence, limitations, and release readiness directly.
+
+This is a documentation and roadmap-labeling decision. It does not change the implementation sequence, engineering gates, risk model, strategy, testing requirements, or Public Release Gate.
+
+### Decision
+
+Repository-facing documentation uses engineering and release-readiness language.
+
+Phase 18 is labeled `Release Readiness` in `ROADMAP.md`. Its exit intent remains unchanged: the Public Release Gate is ready, public-facing documentation and supporting material are complete, limitations are explicit, and the project narrative accurately reflects implemented and validated behavior.
+
+README, roadmap, and current decision-record prose use engineering and release-readiness language.
+
+### Rationale
+
+The project should stand on its engineering content and evidence without tying its public documentation to a specific external use case.
+
+A neutral release-readiness label remains valid for technical, educational, collaborative, and release contexts.
+
+### Consequences
+
+- The Phase 18 implementation order and exit intent remain unchanged.
+- `ROADMAP.md` uses `Release Readiness` as the repository-facing Phase 18 label.
+- Public documentation describes XAUForge as an engineering project and work in progress.
+- The Public Release Gate remains a formal quality gate and is not implied by repository visibility.
+- This wording decision does not alter strategy, risk, execution, testing, licensing, or Git workflow decisions.
