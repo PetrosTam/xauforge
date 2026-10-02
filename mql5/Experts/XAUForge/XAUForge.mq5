@@ -295,14 +295,35 @@ void OnTick()
       return;
    }
 
+   double normalizedVolume = 0.0;
+
+   if(!NormalizeRiskVolumeDown(
+      sizingResult.rawVolume,
+      g_symbolCapabilities.volumeMin,
+      g_symbolCapabilities.volumeMax,
+      g_symbolCapabilities.volumeStep,
+      normalizedVolume
+   ))
+   {
+      Print(
+         "Risk volume normalization failed. New entry is rejected."
+      );
+
+      return;
+   }
+
    PrintFormat(
-      "Risk sizing | equity=%G | risk_percent=%G | planned_risk=%G | reference_volume=%G | reference_loss=%G | raw_volume=%G",
+      "Risk sizing | equity=%G | risk_percent=%G | planned_risk=%G | reference_volume=%G | reference_loss=%G | raw_volume=%G | normalized_volume=%G | volume_min=%G | volume_max=%G | volume_step=%G",
       sizingResult.equity,
       g_riskSettings.riskPercent,
       sizingResult.plannedRiskAmount,
       sizingResult.referenceVolume,
       sizingResult.lossForReferenceVolume,
-      sizingResult.rawVolume
+      sizingResult.rawVolume,
+      normalizedVolume,
+      g_symbolCapabilities.volumeMin,
+      g_symbolCapabilities.volumeMax,
+      g_symbolCapabilities.volumeStep
    );
 }
 
