@@ -13,6 +13,7 @@ datetime g_lastBarOpenTime = 0;
 SymbolCapabilities g_symbolCapabilities;
 AccountPositionMode g_accountPositionMode = ACCOUNT_POSITION_MODE_UNKNOWN;
 RiskSettings g_riskSettings;
+DailyLossState g_dailyLossState;
 
 bool IsNewBar()
 {
@@ -29,6 +30,24 @@ bool IsNewBar()
    return(true);
 }
 
+DailyLossStateResolutionStatus ResolveCurrentDailyLossState(
+   const double currentEquity
+)
+{
+   const long accountLogin =
+      AccountInfoInteger(ACCOUNT_LOGIN);
+
+   const string accountServer =
+      AccountInfoString(ACCOUNT_SERVER);
+
+   return(InitializeOrRecoverDailyLossState(
+      accountLogin,
+      accountServer,
+      currentEquity,
+      g_dailyLossState
+   ));
+}
+
 int OnInit()
 {
    ResetLastError();
@@ -39,6 +58,8 @@ int OnInit()
 
    if(!ValidateRiskSettings(g_riskSettings))
       return(INIT_PARAMETERS_INCORRECT);
+
+   ResetDailyLossState(g_dailyLossState);
 
    g_lastBarOpenTime = iTime(_Symbol, SignalTimeframe, 0);
 
@@ -78,6 +99,24 @@ int OnInit()
       return(INIT_FAILED);
    }
 
+   const double initialEquity =
+      AccountInfoDouble(ACCOUNT_EQUITY);
+
+   const DailyLossStateResolutionStatus dailyLossStatus =
+      ResolveCurrentDailyLossState(initialEquity);
+
+   if(
+      dailyLossStatus ==
+      DAILY_LOSS_STATE_RESOLUTION_FAIL_SAFE
+   )
+   {
+      Print(
+         "Daily-loss state initialization/recovery failed safe."
+      );
+
+      return(INIT_FAILED);
+   }
+
    PrintFormat(
       "Symbol capabilities | symbol=%s | digits=%d | point=%G | tick_size=%G | tick_value=%G | volume_min=%G | volume_max=%G | volume_step=%G | stops_level=%d | freeze_level=%d | trade_mode=%s | order_mode=%d | execution_mode=%s | filling_mode=%d | contract_size=%G | calculation_mode=%s",
       g_symbolCapabilities.symbol,
@@ -103,6 +142,14 @@ int OnInit()
       EnumToString(g_accountPositionMode)
    );
 
+   PrintFormat(
+      "Daily-loss state | resolution=%s | server_day=%d | day_start_equity=%G | baseline_cash_flow=%G",
+      EnumToString(dailyLossStatus),
+      g_dailyLossState.serverDayId,
+      g_dailyLossState.dayStartEquity,
+      g_dailyLossState.cashFlowTotalAtBaseline
+   );
+
    if(!InitializeStrategyIndicators(_Symbol, SignalTimeframe))
       return(INIT_FAILED);
 
@@ -113,6 +160,24 @@ void OnTick()
 {
    if(!IsNewBar())
       return;
+
+   const double stateEquity =
+      AccountInfoDouble(ACCOUNT_EQUITY);
+
+   const DailyLossStateResolutionStatus dailyLossStatus =
+      ResolveCurrentDailyLossState(stateEquity);
+
+   if(
+      dailyLossStatus ==
+      DAILY_LOSS_STATE_RESOLUTION_FAIL_SAFE
+   )
+   {
+      Print(
+         "Daily-loss state resolution failed safe on new bar. New entries are blocked."
+      );
+
+      return;
+   }
 
    CompletedStrategyData data;
 
@@ -133,6 +198,39 @@ void OnTick()
    );
 
    if(signal == SIGNAL_NONE)
+      return;
+
+   const double gateEquity =
+      AccountInfoDouble(ACCOUNT_EQUITY);
+
+   DailyLossEntryGateResult gateResult;
+
+   if(!EvaluateCurrentDailyLossEntryGate(
+      g_dailyLossState,
+      gateEquity,
+      g_riskSettings.maxDailyLossPercent,
+      gateResult
+   ))
+   {
+      Print(
+         "Daily-loss entry gate evaluation failed. New entry is blocked."
+      );
+
+      return;
+   }
+
+   PrintFormat(
+      "Daily-loss gate | entry_allowed=%s | status=%s | adjusted_baseline=%G | equity=%G | drawdown=%G | drawdown_percent=%G | limit_percent=%G",
+      gateResult.entryAllowed ? "true" : "false",
+      EnumToString(gateResult.status),
+      gateResult.evaluation.adjustedBaseline,
+      gateResult.evaluation.currentEquity,
+      gateResult.evaluation.drawdownAmount,
+      gateResult.evaluation.drawdownPercent,
+      gateResult.evaluation.maxDailyLossPercent
+   );
+
+   if(!gateResult.entryAllowed)
       return;
 
    MqlTick tick;
