@@ -54,6 +54,14 @@ enum DailyLossStateResolutionStatus
    DAILY_LOSS_STATE_RESOLUTION_FAIL_SAFE
 };
 
+enum DailyLossEntryGateStatus
+{
+   DAILY_LOSS_ENTRY_GATE_NOT_EVALUATED,
+   DAILY_LOSS_ENTRY_GATE_ALLOWED,
+   DAILY_LOSS_ENTRY_GATE_LIMIT_REACHED,
+   DAILY_LOSS_ENTRY_GATE_EVALUATION_FAILED
+};
+
 struct DailyLossState
 {
    int serverDayId;
@@ -72,6 +80,13 @@ struct DailyLossEvaluation
    double drawdownPercent;
    double maxDailyLossPercent;
    bool limitReached;
+};
+
+struct DailyLossEntryGateResult
+{
+   bool entryAllowed;
+   DailyLossEntryGateStatus status;
+   DailyLossEvaluation evaluation;
 };
 
 bool ValidatePositiveFiniteRiskValue(
@@ -172,6 +187,15 @@ void ResetDailyLossEvaluation(
    evaluation.drawdownPercent = 0.0;
    evaluation.maxDailyLossPercent = 0.0;
    evaluation.limitReached = false;
+}
+
+void ResetDailyLossEntryGateResult(
+   DailyLossEntryGateResult &result
+)
+{
+   result.entryAllowed = false;
+   result.status = DAILY_LOSS_ENTRY_GATE_NOT_EVALUATED;
+   ResetDailyLossEvaluation(result.evaluation);
 }
 
 bool IsValidServerDayId(
@@ -685,6 +709,93 @@ bool EvaluateCurrentDailyLoss(
    }
 
    return(true);
+}
+
+bool CalculateDailyLossEntryGate(
+   const DailyLossEvaluation &evaluation,
+   DailyLossEntryGateResult &result
+)
+{
+   ResetDailyLossEntryGateResult(result);
+
+   if(
+      !MathIsValidNumber(evaluation.drawdownPercent) ||
+      evaluation.drawdownPercent < 0.0
+   )
+   {
+      PrintFormat(
+         "Invalid drawdown percentage for daily-loss entry gate: %G.",
+         evaluation.drawdownPercent
+      );
+
+      result.status = DAILY_LOSS_ENTRY_GATE_EVALUATION_FAILED;
+      return(false);
+   }
+
+   if(!ValidatePercentage(
+      "MaxDailyLossPercent",
+      evaluation.maxDailyLossPercent
+   ))
+   {
+      result.status = DAILY_LOSS_ENTRY_GATE_EVALUATION_FAILED;
+      return(false);
+   }
+
+   const bool expectedLimitReached =
+      evaluation.drawdownPercent >=
+      evaluation.maxDailyLossPercent;
+
+   if(evaluation.limitReached != expectedLimitReached)
+   {
+      Print(
+         "Daily-loss evaluation limit flag is inconsistent with its percentage and threshold."
+      );
+
+      result.status = DAILY_LOSS_ENTRY_GATE_EVALUATION_FAILED;
+      return(false);
+   }
+
+   result.evaluation = evaluation;
+
+   if(expectedLimitReached)
+   {
+      result.status = DAILY_LOSS_ENTRY_GATE_LIMIT_REACHED;
+      return(true);
+   }
+
+   result.entryAllowed = true;
+   result.status = DAILY_LOSS_ENTRY_GATE_ALLOWED;
+
+   return(true);
+}
+
+bool EvaluateCurrentDailyLossEntryGate(
+   const DailyLossState &state,
+   const double currentEquity,
+   const double maxDailyLossPercent,
+   DailyLossEntryGateResult &result
+)
+{
+   ResetDailyLossEntryGateResult(result);
+
+   DailyLossEvaluation evaluation;
+   ResetDailyLossEvaluation(evaluation);
+
+   if(!EvaluateCurrentDailyLoss(
+      state,
+      currentEquity,
+      maxDailyLossPercent,
+      evaluation
+   ))
+   {
+      result.status = DAILY_LOSS_ENTRY_GATE_EVALUATION_FAILED;
+      return(false);
+   }
+
+   return(CalculateDailyLossEntryGate(
+      evaluation,
+      result
+   ));
 }
 
 bool BuildDailyLossPersistenceKeys(
