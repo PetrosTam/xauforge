@@ -62,6 +62,18 @@ struct DailyLossState
    bool valid;
 };
 
+struct DailyLossEvaluation
+{
+   double adjustedBaseline;
+   double currentEquity;
+   double currentCashFlowTotal;
+   double cashFlowDelta;
+   double drawdownAmount;
+   double drawdownPercent;
+   double maxDailyLossPercent;
+   bool limitReached;
+};
+
 bool ValidatePositiveFiniteRiskValue(
    const string name,
    const double value
@@ -146,6 +158,20 @@ void ResetDailyLossState(
    state.dayStartEquity = 0.0;
    state.cashFlowTotalAtBaseline = 0.0;
    state.valid = false;
+}
+
+void ResetDailyLossEvaluation(
+   DailyLossEvaluation &evaluation
+)
+{
+   evaluation.adjustedBaseline = 0.0;
+   evaluation.currentEquity = 0.0;
+   evaluation.currentCashFlowTotal = 0.0;
+   evaluation.cashFlowDelta = 0.0;
+   evaluation.drawdownAmount = 0.0;
+   evaluation.drawdownPercent = 0.0;
+   evaluation.maxDailyLossPercent = 0.0;
+   evaluation.limitReached = false;
 }
 
 bool IsValidServerDayId(
@@ -420,6 +446,242 @@ bool CalculateNonTradingCashFlowTotal(
       }
 
       cashFlowTotal = updatedTotal;
+   }
+
+   return(true);
+}
+
+bool CalculateDailyLossEvaluation(
+   const DailyLossState &state,
+   const double currentEquity,
+   const double currentCashFlowTotal,
+   const double maxDailyLossPercent,
+   DailyLossEvaluation &evaluation
+)
+{
+   ResetDailyLossEvaluation(evaluation);
+
+   if(!state.valid)
+   {
+      Print(
+         "Cannot evaluate daily loss from an invalid daily-loss state."
+      );
+
+      return(false);
+   }
+
+   if(!IsValidServerDayId(state.serverDayId))
+   {
+      PrintFormat(
+         "Cannot evaluate daily loss for invalid server day: %d.",
+         state.serverDayId
+      );
+
+      return(false);
+   }
+
+   if(!ValidatePositiveFiniteRiskValue(
+      "DayStartEquity",
+      state.dayStartEquity
+   ))
+   {
+      return(false);
+   }
+
+   if(!MathIsValidNumber(
+      state.cashFlowTotalAtBaseline
+   ))
+   {
+      PrintFormat(
+         "Invalid baseline cash-flow total for daily-loss evaluation: %G.",
+         state.cashFlowTotalAtBaseline
+      );
+
+      return(false);
+   }
+
+   if(!MathIsValidNumber(currentEquity))
+   {
+      PrintFormat(
+         "Invalid current equity for daily-loss evaluation: %G.",
+         currentEquity
+      );
+
+      return(false);
+   }
+
+   if(!MathIsValidNumber(currentCashFlowTotal))
+   {
+      PrintFormat(
+         "Invalid current cash-flow total for daily-loss evaluation: %G.",
+         currentCashFlowTotal
+      );
+
+      return(false);
+   }
+
+   if(!ValidatePercentage(
+      "MaxDailyLossPercent",
+      maxDailyLossPercent
+   ))
+   {
+      return(false);
+   }
+
+   const double cashFlowDelta =
+      currentCashFlowTotal -
+      state.cashFlowTotalAtBaseline;
+
+   if(!MathIsValidNumber(cashFlowDelta))
+   {
+      Print(
+         "Daily-loss cash-flow delta became non-finite."
+      );
+
+      return(false);
+   }
+
+   const double adjustedBaseline =
+      state.dayStartEquity +
+      cashFlowDelta;
+
+   if(!ValidatePositiveFiniteRiskValue(
+      "AdjustedDailyLossBaseline",
+      adjustedBaseline
+   ))
+   {
+      return(false);
+   }
+
+   const double rawDrawdownAmount =
+      adjustedBaseline -
+      currentEquity;
+
+   if(!MathIsValidNumber(rawDrawdownAmount))
+   {
+      Print(
+         "Daily-loss drawdown amount became non-finite."
+      );
+
+      return(false);
+   }
+
+   const double drawdownAmount =
+      MathMax(0.0, rawDrawdownAmount);
+
+   const double drawdownPercent =
+      (drawdownAmount / adjustedBaseline) *
+      100.0;
+
+   if(!MathIsValidNumber(drawdownPercent))
+   {
+      Print(
+         "Daily-loss drawdown percentage became non-finite."
+      );
+
+      return(false);
+   }
+
+   evaluation.adjustedBaseline = adjustedBaseline;
+   evaluation.currentEquity = currentEquity;
+   evaluation.currentCashFlowTotal =
+      currentCashFlowTotal;
+   evaluation.cashFlowDelta = cashFlowDelta;
+   evaluation.drawdownAmount = drawdownAmount;
+   evaluation.drawdownPercent = drawdownPercent;
+   evaluation.maxDailyLossPercent =
+      maxDailyLossPercent;
+   evaluation.limitReached =
+      drawdownPercent >= maxDailyLossPercent;
+
+   return(true);
+}
+
+bool EvaluateCurrentDailyLoss(
+   const DailyLossState &state,
+   const double currentEquity,
+   const double maxDailyLossPercent,
+   DailyLossEvaluation &evaluation
+)
+{
+   ResetDailyLossEvaluation(evaluation);
+
+   if(!state.valid)
+   {
+      Print(
+         "Cannot evaluate current daily loss from an invalid state."
+      );
+
+      return(false);
+   }
+
+   if(!IsValidServerDayId(state.serverDayId))
+   {
+      PrintFormat(
+         "Cannot evaluate current daily loss for invalid server day: %d.",
+         state.serverDayId
+      );
+
+      return(false);
+   }
+
+   MqlDateTime currentServerDate = {};
+
+   ResetLastError();
+
+   const datetime currentServerTime =
+      TimeCurrent(currentServerDate);
+
+   if(currentServerTime <= 0)
+   {
+      PrintFormat(
+         "Failed to obtain broker-server time for daily-loss evaluation. Error: %d",
+         GetLastError()
+      );
+
+      return(false);
+   }
+
+   const int observedServerDayId =
+      currentServerDate.year * 10000 +
+      currentServerDate.mon * 100 +
+      currentServerDate.day;
+
+   if(
+      !IsValidServerDayId(observedServerDayId) ||
+      observedServerDayId != state.serverDayId
+   )
+   {
+      PrintFormat(
+         "Daily-loss state day does not match the current broker-server day. State: %d, current: %d.",
+         state.serverDayId,
+         observedServerDayId
+      );
+
+      return(false);
+   }
+
+   double currentCashFlowTotal = 0.0;
+
+   if(!CalculateNonTradingCashFlowTotal(
+      state.serverDayId,
+      currentServerTime,
+      currentCashFlowTotal
+   ))
+   {
+      return(false);
+   }
+
+   if(!CalculateDailyLossEvaluation(
+      state,
+      currentEquity,
+      currentCashFlowTotal,
+      maxDailyLossPercent,
+      evaluation
+   ))
+   {
+      ResetDailyLossEvaluation(evaluation);
+      return(false);
    }
 
    return(true);
