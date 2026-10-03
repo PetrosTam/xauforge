@@ -1,4 +1,4 @@
-{
+﻿{
   "platform"    :"mt5",
   "program_type":"expert",
   "copyright"   :"Copyright 2026, Petros Tamboutsiaris",
@@ -18,6 +18,26 @@
       "path":"XAUForge.mq5",
       "compile":true,
       "relative_to_project":true
+    },
+    {
+      "path":"MQL5\\Include\\XAUForge\\StrategyEngine.mqh",
+      "compile":false,
+      "relative_to_project":false
+    },
+    {
+      "path":"MQL5\\Include\\XAUForge\\SymbolManager.mqh",
+      "compile":false,
+      "relative_to_project":false
+    },
+    {
+      "path":"MQL5\\Include\\XAUForge\\RiskManager.mqh",
+      "compile":false,
+      "relative_to_project":false
+    },
+    {
+      "path":"MQL5\\Include\\XAUForge\\TradeManager.mqh",
+      "compile":false,
+      "relative_to_project":false
     }
   ]
 }
