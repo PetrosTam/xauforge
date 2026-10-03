@@ -1,6 +1,7 @@
 #include <XAUForge/StrategyEngine.mqh>
 #include <XAUForge/SymbolManager.mqh>
 #include <XAUForge/RiskManager.mqh>
+#include <XAUForge/TradeManager.mqh>
 
 input ENUM_TIMEFRAMES SignalTimeframe = PERIOD_H1;
 
