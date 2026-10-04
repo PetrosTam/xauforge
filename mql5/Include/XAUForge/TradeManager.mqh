@@ -409,4 +409,366 @@ bool EvaluateTradeModeGate(
    }
 }
 
+const long TRADE_SESSION_SECONDS_PER_DAY = 86400;
+const long TRADE_SESSION_MAX_SECONDS     = 172800;
+
+enum TradeSessionGateStatus
+{
+   TRADE_SESSION_GATE_NOT_EVALUATED,
+   TRADE_SESSION_GATE_ALLOWED,
+   TRADE_SESSION_GATE_OUTSIDE_SESSION,
+   TRADE_SESSION_GATE_LOOKUP_FAILED,
+   TRADE_SESSION_GATE_INVALID_SESSION_DATA,
+   TRADE_SESSION_GATE_INVALID_INPUT
+};
+
+struct TradeSessionGateResult
+{
+   bool allowed;
+   TradeSessionGateStatus status;
+
+   ENUM_DAY_OF_WEEK observationDay;
+   int observationSeconds;
+
+   ENUM_DAY_OF_WEEK matchedSessionDay;
+   int matchedSessionIndex;
+
+   long matchedSessionFromSeconds;
+   long matchedSessionToSeconds;
+};
+
+void ResetTradeSessionGateResult(
+   TradeSessionGateResult &result
+)
+{
+   result.allowed = false;
+   result.status = TRADE_SESSION_GATE_NOT_EVALUATED;
+
+   result.observationDay = SUNDAY;
+   result.observationSeconds = 0;
+
+   result.matchedSessionDay = SUNDAY;
+   result.matchedSessionIndex = -1;
+
+   result.matchedSessionFromSeconds = 0;
+   result.matchedSessionToSeconds = 0;
+}
+
+bool IsTradeSessionWindowActive(
+   const long observationOffsetSeconds,
+   const datetime sessionFrom,
+   const datetime sessionTo,
+   bool &active
+)
+{
+   active = false;
+
+   const long fromSeconds =
+      (long)sessionFrom;
+
+   const long toSeconds =
+      (long)sessionTo;
+
+   if(
+      observationOffsetSeconds < 0 ||
+      observationOffsetSeconds >= TRADE_SESSION_MAX_SECONDS ||
+      fromSeconds < 0 ||
+      fromSeconds >= TRADE_SESSION_MAX_SECONDS ||
+      toSeconds <= fromSeconds ||
+      toSeconds > TRADE_SESSION_MAX_SECONDS
+   )
+   {
+      return(false);
+   }
+
+   active =
+      observationOffsetSeconds >= fromSeconds &&
+      observationOffsetSeconds < toSeconds;
+
+   return(true);
+}
+
+bool FindMatchingTradeSessionForDay(
+   const string symbol,
+   const ENUM_DAY_OF_WEEK sessionDay,
+   const long observationOffsetSeconds,
+   bool &matched,
+   int &matchedSessionIndex,
+   long &matchedFromSeconds,
+   long &matchedToSeconds,
+   TradeSessionGateStatus &failureStatus
+)
+{
+   matched = false;
+   matchedSessionIndex = -1;
+   matchedFromSeconds = 0;
+   matchedToSeconds = 0;
+   failureStatus = TRADE_SESSION_GATE_NOT_EVALUATED;
+
+   for(uint sessionIndex = 0; ; sessionIndex++)
+   {
+      datetime sessionFrom = 0;
+      datetime sessionTo = 0;
+
+      ResetLastError();
+
+      if(!SymbolInfoSessionTrade(
+         symbol,
+         sessionDay,
+         sessionIndex,
+         sessionFrom,
+         sessionTo
+      ))
+      {
+         const int errorCode =
+            GetLastError();
+
+         if(
+            errorCode == ERR_SUCCESS ||
+            errorCode == ERR_MARKET_SESSION_INDEX
+         )
+         {
+            return(true);
+         }
+
+         PrintFormat(
+            "Failed to read trading session | symbol=%s | day=%s | session_index=%u | error=%d",
+            symbol,
+            EnumToString(sessionDay),
+            sessionIndex,
+            errorCode
+         );
+
+         failureStatus =
+            TRADE_SESSION_GATE_LOOKUP_FAILED;
+
+         return(false);
+      }
+
+      if(
+         sessionFrom == 0 &&
+         sessionTo == 0
+      )
+      {
+         return(true);
+      }
+
+      bool active = false;
+
+      if(!IsTradeSessionWindowActive(
+         observationOffsetSeconds,
+         sessionFrom,
+         sessionTo,
+         active
+      ))
+      {
+         PrintFormat(
+            "Invalid trading session data | symbol=%s | day=%s | session_index=%u | from=%I64d | to=%I64d",
+            symbol,
+            EnumToString(sessionDay),
+            sessionIndex,
+            (long)sessionFrom,
+            (long)sessionTo
+         );
+
+         failureStatus =
+            TRADE_SESSION_GATE_INVALID_SESSION_DATA;
+
+         return(false);
+      }
+
+      if(!active)
+         continue;
+
+      matched = true;
+      matchedSessionIndex = (int)sessionIndex;
+      matchedFromSeconds = (long)sessionFrom;
+      matchedToSeconds = (long)sessionTo;
+
+      return(true);
+   }
+
+   Print(
+      "Trading-session lookup exited unexpectedly."
+   );
+
+   failureStatus =
+      TRADE_SESSION_GATE_LOOKUP_FAILED;
+
+   return(false);
+}
+
+bool EvaluateTradeSessionGate(
+   const string symbol,
+   const datetime brokerTime,
+   TradeSessionGateResult &result
+)
+{
+   ResetTradeSessionGateResult(result);
+
+   if(
+      StringLen(symbol) == 0 ||
+      brokerTime <= 0
+   )
+   {
+      Print(
+         "Cannot evaluate trading-session gate from invalid input."
+      );
+
+      result.status =
+         TRADE_SESSION_GATE_INVALID_INPUT;
+
+      return(false);
+   }
+
+   MqlDateTime brokerDateTime = {};
+
+   ResetLastError();
+
+   if(!TimeToStruct(
+      brokerTime,
+      brokerDateTime
+   ))
+   {
+      PrintFormat(
+         "Failed to convert broker time for trading-session evaluation. Error: %d",
+         GetLastError()
+      );
+
+      result.status =
+         TRADE_SESSION_GATE_INVALID_INPUT;
+
+      return(false);
+   }
+
+   if(
+      brokerDateTime.day_of_week < SUNDAY ||
+      brokerDateTime.day_of_week > SATURDAY
+   )
+   {
+      PrintFormat(
+         "Invalid broker day-of-week for trading-session evaluation: %d",
+         brokerDateTime.day_of_week
+      );
+
+      result.status =
+         TRADE_SESSION_GATE_INVALID_INPUT;
+
+      return(false);
+   }
+
+   const ENUM_DAY_OF_WEEK currentDay =
+      (ENUM_DAY_OF_WEEK)brokerDateTime.day_of_week;
+
+   const int observationSeconds =
+      brokerDateTime.hour * 3600 +
+      brokerDateTime.min * 60 +
+      brokerDateTime.sec;
+
+   result.observationDay =
+      currentDay;
+
+   result.observationSeconds =
+      observationSeconds;
+
+   bool matched = false;
+   int matchedSessionIndex = -1;
+   long matchedFromSeconds = 0;
+   long matchedToSeconds = 0;
+
+   TradeSessionGateStatus failureStatus =
+      TRADE_SESSION_GATE_NOT_EVALUATED;
+
+   if(!FindMatchingTradeSessionForDay(
+      symbol,
+      currentDay,
+      observationSeconds,
+      matched,
+      matchedSessionIndex,
+      matchedFromSeconds,
+      matchedToSeconds,
+      failureStatus
+   ))
+   {
+      result.status =
+         failureStatus;
+
+      return(false);
+   }
+
+   if(matched)
+   {
+      result.allowed = true;
+      result.status =
+         TRADE_SESSION_GATE_ALLOWED;
+
+      result.matchedSessionDay =
+         currentDay;
+
+      result.matchedSessionIndex =
+         matchedSessionIndex;
+
+      result.matchedSessionFromSeconds =
+         matchedFromSeconds;
+
+      result.matchedSessionToSeconds =
+         matchedToSeconds;
+
+      return(true);
+   }
+
+   const ENUM_DAY_OF_WEEK previousDay =
+      (ENUM_DAY_OF_WEEK)(
+         (brokerDateTime.day_of_week + 6) % 7
+      );
+
+   const long previousDayObservationSeconds =
+      TRADE_SESSION_SECONDS_PER_DAY +
+      observationSeconds;
+
+   if(!FindMatchingTradeSessionForDay(
+      symbol,
+      previousDay,
+      previousDayObservationSeconds,
+      matched,
+      matchedSessionIndex,
+      matchedFromSeconds,
+      matchedToSeconds,
+      failureStatus
+   ))
+   {
+      result.status =
+         failureStatus;
+
+      return(false);
+   }
+
+   if(matched)
+   {
+      result.allowed = true;
+      result.status =
+         TRADE_SESSION_GATE_ALLOWED;
+
+      result.matchedSessionDay =
+         previousDay;
+
+      result.matchedSessionIndex =
+         matchedSessionIndex;
+
+      result.matchedSessionFromSeconds =
+         matchedFromSeconds;
+
+      result.matchedSessionToSeconds =
+         matchedToSeconds;
+
+      return(true);
+   }
+
+   result.allowed = false;
+   result.status =
+      TRADE_SESSION_GATE_OUTSIDE_SESSION;
+
+   return(true);
+}
+
 #endif
