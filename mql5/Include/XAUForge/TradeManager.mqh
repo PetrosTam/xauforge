@@ -1,6 +1,8 @@
 #ifndef XAUFORGE_TRADE_MANAGER_MQH
 #define XAUFORGE_TRADE_MANAGER_MQH
 
+#include <XAUForge/StrategyEngine.mqh>
+
 struct TradeExecutionSettings
 {
    double maxSpreadPoints;
@@ -230,6 +232,181 @@ bool EvaluateSpreadGate(
    result.status = SPREAD_GATE_ALLOWED;
 
    return(true);
+}
+
+enum TradeModeGateStatus
+{
+   TRADE_MODE_GATE_NOT_EVALUATED,
+   TRADE_MODE_GATE_ALLOWED,
+   TRADE_MODE_GATE_TRADING_DISABLED,
+   TRADE_MODE_GATE_CLOSE_ONLY,
+   TRADE_MODE_GATE_DIRECTION_NOT_ALLOWED,
+   TRADE_MODE_GATE_INVALID_INPUT
+};
+
+struct TradeModeGateResult
+{
+   bool allowed;
+   TradeModeGateStatus status;
+   SignalDirection direction;
+   ENUM_SYMBOL_TRADE_MODE tradeMode;
+};
+
+void ResetTradeModeGateResult(
+   TradeModeGateResult &result
+)
+{
+   result.allowed = false;
+   result.status = TRADE_MODE_GATE_NOT_EVALUATED;
+   result.direction = SIGNAL_NONE;
+   result.tradeMode = SYMBOL_TRADE_MODE_DISABLED;
+}
+
+bool LoadCurrentTradeMode(
+   const string symbol,
+   ENUM_SYMBOL_TRADE_MODE &tradeMode
+)
+{
+   tradeMode = SYMBOL_TRADE_MODE_DISABLED;
+
+   if(StringLen(symbol) == 0)
+   {
+      Print(
+         "Cannot load current trade mode for an empty symbol."
+      );
+
+      return(false);
+   }
+
+   long tradeModeValue = 0;
+
+   ResetLastError();
+
+   if(!SymbolInfoInteger(
+      symbol,
+      SYMBOL_TRADE_MODE,
+      tradeModeValue
+   ))
+   {
+      PrintFormat(
+         "Failed to obtain SYMBOL_TRADE_MODE for %s. Error: %d",
+         symbol,
+         GetLastError()
+      );
+
+      return(false);
+   }
+
+   const ENUM_SYMBOL_TRADE_MODE observedTradeMode =
+      (ENUM_SYMBOL_TRADE_MODE)tradeModeValue;
+
+   switch(observedTradeMode)
+   {
+      case SYMBOL_TRADE_MODE_DISABLED:
+      case SYMBOL_TRADE_MODE_LONGONLY:
+      case SYMBOL_TRADE_MODE_SHORTONLY:
+      case SYMBOL_TRADE_MODE_CLOSEONLY:
+      case SYMBOL_TRADE_MODE_FULL:
+         tradeMode = observedTradeMode;
+         return(true);
+
+      default:
+         PrintFormat(
+            "Unsupported SYMBOL_TRADE_MODE value for %s: %d",
+            symbol,
+            (int)tradeModeValue
+         );
+
+         return(false);
+   }
+}
+
+bool EvaluateTradeModeGate(
+   const SignalDirection direction,
+   const ENUM_SYMBOL_TRADE_MODE tradeMode,
+   TradeModeGateResult &result
+)
+{
+   ResetTradeModeGateResult(result);
+
+   result.direction = direction;
+   result.tradeMode = tradeMode;
+
+   if(
+      direction != SIGNAL_BUY &&
+      direction != SIGNAL_SELL
+   )
+   {
+      PrintFormat(
+         "Cannot evaluate trade-mode gate for invalid signal direction: %s",
+         EnumToString(direction)
+      );
+
+      result.status =
+         TRADE_MODE_GATE_INVALID_INPUT;
+
+      return(false);
+   }
+
+   switch(tradeMode)
+   {
+      case SYMBOL_TRADE_MODE_FULL:
+         result.allowed = true;
+         result.status = TRADE_MODE_GATE_ALLOWED;
+         return(true);
+
+      case SYMBOL_TRADE_MODE_LONGONLY:
+         if(direction == SIGNAL_BUY)
+         {
+            result.allowed = true;
+            result.status = TRADE_MODE_GATE_ALLOWED;
+         }
+         else
+         {
+            result.allowed = false;
+            result.status =
+               TRADE_MODE_GATE_DIRECTION_NOT_ALLOWED;
+         }
+
+         return(true);
+
+      case SYMBOL_TRADE_MODE_SHORTONLY:
+         if(direction == SIGNAL_SELL)
+         {
+            result.allowed = true;
+            result.status = TRADE_MODE_GATE_ALLOWED;
+         }
+         else
+         {
+            result.allowed = false;
+            result.status =
+               TRADE_MODE_GATE_DIRECTION_NOT_ALLOWED;
+         }
+
+         return(true);
+
+      case SYMBOL_TRADE_MODE_CLOSEONLY:
+         result.allowed = false;
+         result.status = TRADE_MODE_GATE_CLOSE_ONLY;
+         return(true);
+
+      case SYMBOL_TRADE_MODE_DISABLED:
+         result.allowed = false;
+         result.status =
+            TRADE_MODE_GATE_TRADING_DISABLED;
+         return(true);
+
+      default:
+         PrintFormat(
+            "Cannot evaluate unsupported SYMBOL_TRADE_MODE value: %d",
+            (int)tradeMode
+         );
+
+         result.status =
+            TRADE_MODE_GATE_INVALID_INPUT;
+
+         return(false);
+   }
 }
 
 #endif
