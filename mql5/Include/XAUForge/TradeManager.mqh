@@ -2,6 +2,7 @@
 #define XAUFORGE_TRADE_MANAGER_MQH
 
 #include <XAUForge/StrategyEngine.mqh>
+#include <XAUForge/RiskManager.mqh>
 
 struct TradeExecutionSettings
 {
@@ -773,6 +774,7 @@ bool EvaluateTradeSessionGate(
 
 struct TradeDistanceConstraints
 {
+   int digits;
    double point;
    double tickSize;
    int stopsLevelPoints;
@@ -783,6 +785,7 @@ void ResetTradeDistanceConstraints(
    TradeDistanceConstraints &constraints
 )
 {
+   constraints.digits = 0;
    constraints.point = 0.0;
    constraints.tickSize = 0.0;
    constraints.stopsLevelPoints = 0;
@@ -805,10 +808,28 @@ bool LoadCurrentTradeDistanceConstraints(
       return(false);
    }
 
+   long digits = 0;
    double point = 0.0;
    double tickSize = 0.0;
    long stopsLevel = 0;
    long freezeLevel = 0;
+
+   ResetLastError();
+
+   if(!SymbolInfoInteger(
+      symbol,
+      SYMBOL_DIGITS,
+      digits
+   ))
+   {
+      PrintFormat(
+         "Failed to obtain SYMBOL_DIGITS for %s. Error: %d",
+         symbol,
+         GetLastError()
+      );
+
+      return(false);
+   }
 
    ResetLastError();
 
@@ -879,17 +900,22 @@ bool LoadCurrentTradeDistanceConstraints(
    }
 
    if(
+      digits < 0 ||
+      digits > 8 ||
       !MathIsValidNumber(point) ||
       !MathIsValidNumber(tickSize) ||
       point <= 0.0 ||
       tickSize <= 0.0 ||
       stopsLevel < 0 ||
-      freezeLevel < 0
+      stopsLevel > INT_MAX ||
+      freezeLevel < 0 ||
+      freezeLevel > INT_MAX
    )
    {
       PrintFormat(
-         "Invalid trade-distance constraints | symbol=%s | point=%G | tick_size=%G | stops_level=%I64d | freeze_level=%I64d",
+         "Invalid trade-distance constraints | symbol=%s | digits=%I64d | point=%G | tick_size=%G | stops_level=%I64d | freeze_level=%I64d",
          symbol,
+         digits,
          point,
          tickSize,
          stopsLevel,
@@ -899,10 +925,669 @@ bool LoadCurrentTradeDistanceConstraints(
       return(false);
    }
 
+   constraints.digits = (int)digits;
    constraints.point = point;
    constraints.tickSize = tickSize;
    constraints.stopsLevelPoints = (int)stopsLevel;
    constraints.freezeLevelPoints = (int)freezeLevel;
+
+   return(true);
+}
+
+double CalculatePriceComparisonTolerance(
+   const double firstPrice,
+   const double secondPrice
+)
+{
+   const double scale =
+      MathMax(
+         1.0,
+         MathMax(
+            MathAbs(firstPrice),
+            MathAbs(secondPrice)
+         )
+      );
+
+   return(
+      DBL_EPSILON *
+      64.0 *
+      scale
+   );
+}
+
+double SnapTickStepIfNearlyInteger(
+   const double rawSteps
+)
+{
+   const double nearestInteger =
+      MathRound(rawSteps);
+
+   const double tolerance =
+      DBL_EPSILON *
+      64.0 *
+      MathMax(
+         1.0,
+         MathAbs(rawSteps)
+      );
+
+   if(
+      MathAbs(
+         rawSteps -
+         nearestInteger
+      ) <=
+      tolerance
+   )
+   {
+      return(nearestInteger);
+   }
+
+   return(rawSteps);
+}
+
+bool NormalizePriceDownToTick(
+   const double price,
+   const TradeDistanceConstraints &constraints,
+   double &normalizedPrice
+)
+{
+   normalizedPrice = 0.0;
+
+   if(
+      !MathIsValidNumber(price) ||
+      price <= 0.0 ||
+      constraints.digits < 0 ||
+      constraints.digits > 8 ||
+      !MathIsValidNumber(constraints.tickSize) ||
+      constraints.tickSize <= 0.0
+   )
+   {
+      return(false);
+   }
+
+   const double rawSteps =
+      price / constraints.tickSize;
+
+   if(!MathIsValidNumber(rawSteps))
+      return(false);
+
+   const double directionalSteps =
+      SnapTickStepIfNearlyInteger(
+         rawSteps
+      );
+
+   const double tickSteps =
+      MathFloor(directionalSteps);
+
+   const double candidatePrice =
+      NormalizeDouble(
+         tickSteps * constraints.tickSize,
+         constraints.digits
+      );
+
+   if(
+      !MathIsValidNumber(candidatePrice) ||
+      candidatePrice <= 0.0
+   )
+   {
+      return(false);
+   }
+
+   const double tolerance =
+      CalculatePriceComparisonTolerance(
+         candidatePrice,
+         price
+      );
+
+   if(candidatePrice > price + tolerance)
+      return(false);
+
+   normalizedPrice = candidatePrice;
+
+   return(true);
+}
+
+bool NormalizePriceUpToTick(
+   const double price,
+   const TradeDistanceConstraints &constraints,
+   double &normalizedPrice
+)
+{
+   normalizedPrice = 0.0;
+
+   if(
+      !MathIsValidNumber(price) ||
+      price <= 0.0 ||
+      constraints.digits < 0 ||
+      constraints.digits > 8 ||
+      !MathIsValidNumber(constraints.tickSize) ||
+      constraints.tickSize <= 0.0
+   )
+   {
+      return(false);
+   }
+
+   const double rawSteps =
+      price / constraints.tickSize;
+
+   if(!MathIsValidNumber(rawSteps))
+      return(false);
+
+   const double directionalSteps =
+      SnapTickStepIfNearlyInteger(
+         rawSteps
+      );
+
+   const double tickSteps =
+      MathCeil(directionalSteps);
+
+   const double candidatePrice =
+      NormalizeDouble(
+         tickSteps * constraints.tickSize,
+         constraints.digits
+      );
+
+   if(
+      !MathIsValidNumber(candidatePrice) ||
+      candidatePrice <= 0.0
+   )
+   {
+      return(false);
+   }
+
+   const double tolerance =
+      CalculatePriceComparisonTolerance(
+         candidatePrice,
+         price
+      );
+
+   if(candidatePrice < price - tolerance)
+      return(false);
+
+   normalizedPrice = candidatePrice;
+
+   return(true);
+}
+
+bool ValidateRiskTradePlanForExecutionGeometry(
+   const RiskTradePlan &riskPlan,
+   const double riskRewardRatio
+)
+{
+   if(
+      (riskPlan.direction != SIGNAL_BUY &&
+       riskPlan.direction != SIGNAL_SELL) ||
+      !MathIsValidNumber(riskPlan.entryPrice) ||
+      !MathIsValidNumber(riskPlan.stopLossPrice) ||
+      !MathIsValidNumber(riskPlan.takeProfitPrice) ||
+      !MathIsValidNumber(riskPlan.stopDistance) ||
+      !MathIsValidNumber(riskRewardRatio) ||
+      riskPlan.entryPrice <= 0.0 ||
+      riskPlan.stopLossPrice <= 0.0 ||
+      riskPlan.takeProfitPrice <= 0.0 ||
+      riskPlan.stopDistance <= 0.0 ||
+      riskRewardRatio <= 0.0
+   )
+   {
+      return(false);
+   }
+
+   if(
+      riskPlan.direction == SIGNAL_BUY &&
+      (
+         riskPlan.stopLossPrice >= riskPlan.entryPrice ||
+         riskPlan.takeProfitPrice <= riskPlan.entryPrice
+      )
+   )
+   {
+      return(false);
+   }
+
+   if(
+      riskPlan.direction == SIGNAL_SELL &&
+      (
+         riskPlan.stopLossPrice <= riskPlan.entryPrice ||
+         riskPlan.takeProfitPrice >= riskPlan.entryPrice
+      )
+   )
+   {
+      return(false);
+   }
+
+   const double plannedStopDistance =
+      MathAbs(
+         riskPlan.entryPrice -
+         riskPlan.stopLossPrice
+      );
+
+   const double stopDistanceTolerance =
+      CalculatePriceComparisonTolerance(
+         plannedStopDistance,
+         riskPlan.stopDistance
+      );
+
+   if(
+      MathAbs(
+         plannedStopDistance -
+         riskPlan.stopDistance
+      ) >
+      stopDistanceTolerance
+   )
+   {
+      return(false);
+   }
+
+   const double plannedTakeProfitDistance =
+      MathAbs(
+         riskPlan.takeProfitPrice -
+         riskPlan.entryPrice
+      );
+
+   const double expectedTakeProfitDistance =
+      riskPlan.stopDistance *
+      riskRewardRatio;
+
+   if(
+      !MathIsValidNumber(expectedTakeProfitDistance) ||
+      expectedTakeProfitDistance <= 0.0
+   )
+   {
+      return(false);
+   }
+
+   const double takeProfitTolerance =
+      CalculatePriceComparisonTolerance(
+         plannedTakeProfitDistance,
+         expectedTakeProfitDistance
+      );
+
+   return(
+      MathAbs(
+         plannedTakeProfitDistance -
+         expectedTakeProfitDistance
+      ) <=
+      takeProfitTolerance
+   );
+}
+
+enum TradeGeometryStatus
+{
+   TRADE_GEOMETRY_NOT_EVALUATED,
+   TRADE_GEOMETRY_VALID,
+   TRADE_GEOMETRY_INVALID_INPUT,
+   TRADE_GEOMETRY_NORMALIZATION_FAILED,
+   TRADE_GEOMETRY_STOPS_LEVEL_VIOLATION
+};
+
+struct FinalTradeGeometry
+{
+   bool valid;
+   TradeGeometryStatus status;
+
+   SignalDirection direction;
+
+   double entryPrice;
+   double stopLossPrice;
+   double takeProfitPrice;
+
+   double originalStopDistance;
+   double finalStopDistance;
+
+   bool stopDistanceChanged;
+};
+
+void ResetFinalTradeGeometry(
+   FinalTradeGeometry &geometry
+)
+{
+   geometry.valid = false;
+   geometry.status = TRADE_GEOMETRY_NOT_EVALUATED;
+
+   geometry.direction = SIGNAL_NONE;
+
+   geometry.entryPrice = 0.0;
+   geometry.stopLossPrice = 0.0;
+   geometry.takeProfitPrice = 0.0;
+
+   geometry.originalStopDistance = 0.0;
+   geometry.finalStopDistance = 0.0;
+
+   geometry.stopDistanceChanged = false;
+}
+
+bool BuildFinalTradeGeometry(
+   const RiskTradePlan &riskPlan,
+   const double riskRewardRatio,
+   const PreTradeMarketSnapshot &snapshot,
+   const TradeDistanceConstraints &constraints,
+   FinalTradeGeometry &geometry
+)
+{
+   ResetFinalTradeGeometry(geometry);
+
+   if(
+      !ValidateRiskTradePlanForExecutionGeometry(
+         riskPlan,
+         riskRewardRatio
+      ) ||
+      StringLen(snapshot.symbol) == 0 ||
+      snapshot.timeMsc <= 0 ||
+      !MathIsValidNumber(snapshot.bid) ||
+      !MathIsValidNumber(snapshot.ask) ||
+      !MathIsValidNumber(snapshot.point) ||
+      snapshot.bid <= 0.0 ||
+      snapshot.ask <= 0.0 ||
+      snapshot.ask < snapshot.bid ||
+      snapshot.point <= 0.0 ||
+      constraints.digits < 0 ||
+      constraints.digits > 8 ||
+      !MathIsValidNumber(constraints.point) ||
+      !MathIsValidNumber(constraints.tickSize) ||
+      constraints.point <= 0.0 ||
+      constraints.tickSize <= 0.0 ||
+      constraints.stopsLevelPoints < 0 ||
+      constraints.freezeLevelPoints < 0
+   )
+   {
+      Print(
+         "Cannot build final trade geometry from invalid input."
+      );
+
+      geometry.status =
+         TRADE_GEOMETRY_INVALID_INPUT;
+
+      return(false);
+   }
+
+   const double pointTolerance =
+      CalculatePriceComparisonTolerance(
+         snapshot.point,
+         constraints.point
+      );
+
+   if(
+      MathAbs(
+         snapshot.point -
+         constraints.point
+      ) >
+      pointTolerance
+   )
+   {
+      PrintFormat(
+         "Pre-trade point mismatch | snapshot_point=%G | constraint_point=%G",
+         snapshot.point,
+         constraints.point
+      );
+
+      geometry.status =
+         TRADE_GEOMETRY_INVALID_INPUT;
+
+      return(false);
+   }
+
+   const double minimumStopDistance =
+      constraints.stopsLevelPoints *
+      constraints.point;
+
+   if(
+      !MathIsValidNumber(minimumStopDistance) ||
+      minimumStopDistance < 0.0
+   )
+   {
+      geometry.status =
+         TRADE_GEOMETRY_INVALID_INPUT;
+
+      return(false);
+   }
+
+   geometry.direction =
+      riskPlan.direction;
+
+   geometry.entryPrice =
+      (riskPlan.direction == SIGNAL_BUY)
+      ? snapshot.ask
+      : snapshot.bid;
+
+   geometry.originalStopDistance =
+      riskPlan.stopDistance;
+
+   double rawStopLoss = 0.0;
+   double stopLossBound = 0.0;
+   double stopLossCandidate = 0.0;
+   double normalizedStopLoss = 0.0;
+
+   if(riskPlan.direction == SIGNAL_BUY)
+   {
+      rawStopLoss =
+         geometry.entryPrice -
+         riskPlan.stopDistance;
+
+      stopLossBound =
+         snapshot.bid -
+         minimumStopDistance;
+
+      stopLossCandidate =
+         MathMin(
+            rawStopLoss,
+            stopLossBound
+         );
+
+      if(!NormalizePriceDownToTick(
+         stopLossCandidate,
+         constraints,
+         normalizedStopLoss
+      ))
+      {
+         geometry.status =
+            TRADE_GEOMETRY_NORMALIZATION_FAILED;
+
+         return(false);
+      }
+   }
+   else
+   {
+      rawStopLoss =
+         geometry.entryPrice +
+         riskPlan.stopDistance;
+
+      stopLossBound =
+         snapshot.ask +
+         minimumStopDistance;
+
+      stopLossCandidate =
+         MathMax(
+            rawStopLoss,
+            stopLossBound
+         );
+
+      if(!NormalizePriceUpToTick(
+         stopLossCandidate,
+         constraints,
+         normalizedStopLoss
+      ))
+      {
+         geometry.status =
+            TRADE_GEOMETRY_NORMALIZATION_FAILED;
+
+         return(false);
+      }
+   }
+
+   geometry.stopLossPrice =
+      normalizedStopLoss;
+
+   geometry.finalStopDistance =
+      MathAbs(
+         geometry.entryPrice -
+         geometry.stopLossPrice
+      );
+
+   if(
+      !MathIsValidNumber(geometry.finalStopDistance) ||
+      geometry.finalStopDistance <= 0.0
+   )
+   {
+      geometry.status =
+         TRADE_GEOMETRY_INVALID_INPUT;
+
+      return(false);
+   }
+
+   const double stopDistanceTolerance =
+      CalculatePriceComparisonTolerance(
+         geometry.finalStopDistance,
+         geometry.originalStopDistance
+      );
+
+   geometry.stopDistanceChanged =
+      MathAbs(
+         geometry.finalStopDistance -
+         geometry.originalStopDistance
+      ) >
+      stopDistanceTolerance;
+
+   const double targetTakeProfitDistance =
+      geometry.finalStopDistance *
+      riskRewardRatio;
+
+   if(
+      !MathIsValidNumber(targetTakeProfitDistance) ||
+      targetTakeProfitDistance <= 0.0
+   )
+   {
+      geometry.status =
+         TRADE_GEOMETRY_INVALID_INPUT;
+
+      return(false);
+   }
+
+   double rawTakeProfit = 0.0;
+   double normalizedTakeProfit = 0.0;
+
+   if(riskPlan.direction == SIGNAL_BUY)
+   {
+      rawTakeProfit =
+         geometry.entryPrice +
+         targetTakeProfitDistance;
+
+      if(!NormalizePriceUpToTick(
+         rawTakeProfit,
+         constraints,
+         normalizedTakeProfit
+      ))
+      {
+         geometry.status =
+            TRADE_GEOMETRY_NORMALIZATION_FAILED;
+
+         return(false);
+      }
+   }
+   else
+   {
+      rawTakeProfit =
+         geometry.entryPrice -
+         targetTakeProfitDistance;
+
+      if(!NormalizePriceDownToTick(
+         rawTakeProfit,
+         constraints,
+         normalizedTakeProfit
+      ))
+      {
+         geometry.status =
+            TRADE_GEOMETRY_NORMALIZATION_FAILED;
+
+         return(false);
+      }
+   }
+
+   geometry.takeProfitPrice =
+      normalizedTakeProfit;
+
+   const double stopLossTolerance =
+      CalculatePriceComparisonTolerance(
+         geometry.stopLossPrice,
+         (
+            riskPlan.direction == SIGNAL_BUY
+            ? snapshot.bid
+            : snapshot.ask
+         )
+      );
+
+   const double takeProfitTolerance =
+      CalculatePriceComparisonTolerance(
+         geometry.takeProfitPrice,
+         (
+            riskPlan.direction == SIGNAL_BUY
+            ? snapshot.bid
+            : snapshot.ask
+         )
+      );
+
+   if(riskPlan.direction == SIGNAL_BUY)
+   {
+      const double stopLossDistanceFromBid =
+         snapshot.bid -
+         geometry.stopLossPrice;
+
+      const double takeProfitDistanceFromBid =
+         geometry.takeProfitPrice -
+         snapshot.bid;
+
+      if(
+         geometry.stopLossPrice >= snapshot.bid ||
+         geometry.takeProfitPrice <= snapshot.bid ||
+         stopLossDistanceFromBid +
+            stopLossTolerance <
+            minimumStopDistance ||
+         takeProfitDistanceFromBid +
+            takeProfitTolerance <
+            minimumStopDistance
+      )
+      {
+         Print(
+            "Final BUY geometry violates current stop-distance constraints."
+         );
+
+         geometry.status =
+            TRADE_GEOMETRY_STOPS_LEVEL_VIOLATION;
+
+         return(false);
+      }
+   }
+   else
+   {
+      const double stopLossDistanceFromAsk =
+         geometry.stopLossPrice -
+         snapshot.ask;
+
+      const double takeProfitDistanceFromAsk =
+         snapshot.ask -
+         geometry.takeProfitPrice;
+
+      if(
+         geometry.stopLossPrice <= snapshot.ask ||
+         geometry.takeProfitPrice >= snapshot.ask ||
+         stopLossDistanceFromAsk +
+            stopLossTolerance <
+            minimumStopDistance ||
+         takeProfitDistanceFromAsk +
+            takeProfitTolerance <
+            minimumStopDistance
+      )
+      {
+         Print(
+            "Final SELL geometry violates current stop-distance constraints."
+         );
+
+         geometry.status =
+            TRADE_GEOMETRY_STOPS_LEVEL_VIOLATION;
+
+         return(false);
+      }
+   }
+
+   geometry.valid = true;
+   geometry.status = TRADE_GEOMETRY_VALID;
 
    return(true);
 }
