@@ -771,4 +771,140 @@ bool EvaluateTradeSessionGate(
    return(true);
 }
 
+struct TradeDistanceConstraints
+{
+   double point;
+   double tickSize;
+   int stopsLevelPoints;
+   int freezeLevelPoints;
+};
+
+void ResetTradeDistanceConstraints(
+   TradeDistanceConstraints &constraints
+)
+{
+   constraints.point = 0.0;
+   constraints.tickSize = 0.0;
+   constraints.stopsLevelPoints = 0;
+   constraints.freezeLevelPoints = 0;
+}
+
+bool LoadCurrentTradeDistanceConstraints(
+   const string symbol,
+   TradeDistanceConstraints &constraints
+)
+{
+   ResetTradeDistanceConstraints(constraints);
+
+   if(StringLen(symbol) == 0)
+   {
+      Print(
+         "Cannot load trade-distance constraints for an empty symbol."
+      );
+
+      return(false);
+   }
+
+   double point = 0.0;
+   double tickSize = 0.0;
+   long stopsLevel = 0;
+   long freezeLevel = 0;
+
+   ResetLastError();
+
+   if(!SymbolInfoDouble(
+      symbol,
+      SYMBOL_POINT,
+      point
+   ))
+   {
+      PrintFormat(
+         "Failed to obtain SYMBOL_POINT for %s. Error: %d",
+         symbol,
+         GetLastError()
+      );
+
+      return(false);
+   }
+
+   ResetLastError();
+
+   if(!SymbolInfoDouble(
+      symbol,
+      SYMBOL_TRADE_TICK_SIZE,
+      tickSize
+   ))
+   {
+      PrintFormat(
+         "Failed to obtain SYMBOL_TRADE_TICK_SIZE for %s. Error: %d",
+         symbol,
+         GetLastError()
+      );
+
+      return(false);
+   }
+
+   ResetLastError();
+
+   if(!SymbolInfoInteger(
+      symbol,
+      SYMBOL_TRADE_STOPS_LEVEL,
+      stopsLevel
+   ))
+   {
+      PrintFormat(
+         "Failed to obtain SYMBOL_TRADE_STOPS_LEVEL for %s. Error: %d",
+         symbol,
+         GetLastError()
+      );
+
+      return(false);
+   }
+
+   ResetLastError();
+
+   if(!SymbolInfoInteger(
+      symbol,
+      SYMBOL_TRADE_FREEZE_LEVEL,
+      freezeLevel
+   ))
+   {
+      PrintFormat(
+         "Failed to obtain SYMBOL_TRADE_FREEZE_LEVEL for %s. Error: %d",
+         symbol,
+         GetLastError()
+      );
+
+      return(false);
+   }
+
+   if(
+      !MathIsValidNumber(point) ||
+      !MathIsValidNumber(tickSize) ||
+      point <= 0.0 ||
+      tickSize <= 0.0 ||
+      stopsLevel < 0 ||
+      freezeLevel < 0
+   )
+   {
+      PrintFormat(
+         "Invalid trade-distance constraints | symbol=%s | point=%G | tick_size=%G | stops_level=%I64d | freeze_level=%I64d",
+         symbol,
+         point,
+         tickSize,
+         stopsLevel,
+         freezeLevel
+      );
+
+      return(false);
+   }
+
+   constraints.point = point;
+   constraints.tickSize = tickSize;
+   constraints.stopsLevelPoints = (int)stopsLevel;
+   constraints.freezeLevelPoints = (int)freezeLevel;
+
+   return(true);
+}
+
 #endif
