@@ -1797,4 +1797,288 @@ bool CalculateFinalRiskSizing(
    return(true);
 }
 
+enum MarginValidationStatus
+{
+   MARGIN_VALIDATION_NOT_EVALUATED,
+   MARGIN_VALIDATION_ALLOWED,
+   MARGIN_VALIDATION_INSUFFICIENT_FREE_MARGIN,
+   MARGIN_VALIDATION_INVALID_INPUT,
+   MARGIN_VALIDATION_CALCULATION_FAILED,
+   MARGIN_VALIDATION_ACCOUNT_STATE_FAILED
+};
+
+struct MarginValidationResult
+{
+   bool allowed;
+   MarginValidationStatus status;
+
+   double requiredMargin;
+   double freeMargin;
+   double remainingFreeMargin;
+};
+
+void ResetMarginValidationResult(
+   MarginValidationResult &result
+)
+{
+   result.allowed = false;
+   result.status =
+      MARGIN_VALIDATION_NOT_EVALUATED;
+
+   result.requiredMargin = 0.0;
+   result.freeMargin = 0.0;
+   result.remainingFreeMargin = 0.0;
+}
+
+bool ValidateFinalRiskSizingForMargin(
+   const FinalRiskSizingResult &riskSizing
+)
+{
+   if(
+      !riskSizing.valid ||
+      riskSizing.status !=
+         FINAL_RISK_SIZING_VALID ||
+      !MathIsValidNumber(
+         riskSizing.normalizedVolume
+      ) ||
+      !MathIsValidNumber(
+         riskSizing.sizing.rawVolume
+      ) ||
+      riskSizing.normalizedVolume <= 0.0 ||
+      riskSizing.sizing.rawVolume <= 0.0
+   )
+   {
+      return(false);
+   }
+
+   const double volumeTolerance =
+      DBL_EPSILON *
+      MathMax(
+         1.0,
+         MathAbs(
+            riskSizing.sizing.rawVolume
+         )
+      ) *
+      16.0;
+
+   if(
+      riskSizing.normalizedVolume >
+      riskSizing.sizing.rawVolume +
+      volumeTolerance
+   )
+   {
+      return(false);
+   }
+
+   return(true);
+}
+
+bool CalculateRequiredMargin(
+   const string symbol,
+   const FinalTradeGeometry &geometry,
+   const FinalRiskSizingResult &riskSizing,
+   double &requiredMargin
+)
+{
+   requiredMargin = 0.0;
+
+   if(
+      StringLen(symbol) == 0 ||
+      !ValidateFinalTradeGeometryForRiskSizing(
+         geometry
+      ) ||
+      !ValidateFinalRiskSizingForMargin(
+         riskSizing
+      )
+   )
+   {
+      Print(
+         "Cannot calculate required margin from invalid input."
+      );
+
+      return(false);
+   }
+
+   const ENUM_ORDER_TYPE orderType =
+      (geometry.direction == SIGNAL_BUY)
+      ? ORDER_TYPE_BUY
+      : ORDER_TYPE_SELL;
+
+   ResetLastError();
+
+   if(!OrderCalcMargin(
+      orderType,
+      symbol,
+      riskSizing.normalizedVolume,
+      geometry.entryPrice,
+      requiredMargin
+   ))
+   {
+      PrintFormat(
+         "OrderCalcMargin failed. Error: %d",
+         GetLastError()
+      );
+
+      requiredMargin = 0.0;
+
+      return(false);
+   }
+
+   if(
+      !MathIsValidNumber(requiredMargin) ||
+      requiredMargin < 0.0
+   )
+   {
+      PrintFormat(
+         "OrderCalcMargin produced an invalid margin value: %G",
+         requiredMargin
+      );
+
+      requiredMargin = 0.0;
+
+      return(false);
+   }
+
+   return(true);
+}
+
+bool LoadCurrentFreeMargin(
+   double &freeMargin
+)
+{
+   freeMargin =
+      AccountInfoDouble(
+         ACCOUNT_MARGIN_FREE
+      );
+
+   if(!MathIsValidNumber(freeMargin))
+   {
+      PrintFormat(
+         "Current account free margin is invalid: %G",
+         freeMargin
+      );
+
+      freeMargin = 0.0;
+
+      return(false);
+   }
+
+   return(true);
+}
+
+bool EvaluateMarginCapacity(
+   const double requiredMargin,
+   const double freeMargin,
+   MarginValidationResult &result
+)
+{
+   ResetMarginValidationResult(result);
+
+   if(
+      !MathIsValidNumber(requiredMargin) ||
+      !MathIsValidNumber(freeMargin) ||
+      requiredMargin < 0.0
+   )
+   {
+      Print(
+         "Cannot evaluate margin capacity from invalid input."
+      );
+
+      result.status =
+         MARGIN_VALIDATION_INVALID_INPUT;
+
+      return(false);
+   }
+
+   result.requiredMargin =
+      requiredMargin;
+
+   result.freeMargin =
+      freeMargin;
+
+   result.remainingFreeMargin =
+      freeMargin -
+      requiredMargin;
+
+   if(requiredMargin > freeMargin)
+   {
+      result.allowed = false;
+      result.status =
+         MARGIN_VALIDATION_INSUFFICIENT_FREE_MARGIN;
+
+      return(true);
+   }
+
+   result.allowed = true;
+   result.status =
+      MARGIN_VALIDATION_ALLOWED;
+
+   return(true);
+}
+
+bool EvaluateCurrentMarginCapacity(
+   const string symbol,
+   const FinalTradeGeometry &geometry,
+   const FinalRiskSizingResult &riskSizing,
+   MarginValidationResult &result
+)
+{
+   ResetMarginValidationResult(result);
+
+   if(
+      StringLen(symbol) == 0 ||
+      !ValidateFinalTradeGeometryForRiskSizing(
+         geometry
+      ) ||
+      !ValidateFinalRiskSizingForMargin(
+         riskSizing
+      )
+   )
+   {
+      Print(
+         "Cannot evaluate current margin capacity from invalid input."
+      );
+
+      result.status =
+         MARGIN_VALIDATION_INVALID_INPUT;
+
+      return(false);
+   }
+
+   double requiredMargin = 0.0;
+
+   if(!CalculateRequiredMargin(
+      symbol,
+      geometry,
+      riskSizing,
+      requiredMargin
+   ))
+   {
+      result.status =
+         MARGIN_VALIDATION_CALCULATION_FAILED;
+
+      return(false);
+   }
+
+   double freeMargin = 0.0;
+
+   if(!LoadCurrentFreeMargin(
+      freeMargin
+   ))
+   {
+      result.status =
+         MARGIN_VALIDATION_ACCOUNT_STATE_FAILED;
+
+      return(false);
+   }
+
+   return(
+      EvaluateMarginCapacity(
+         requiredMargin,
+         freeMargin,
+         result
+      )
+   );
+}
+
 #endif
