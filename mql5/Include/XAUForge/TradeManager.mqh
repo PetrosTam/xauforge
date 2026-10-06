@@ -3056,4 +3056,176 @@ void ClassifyImmediateTradeSubmissionResult(
       TRADE_SUBMISSION_SERVER_UNKNOWN;
 }
 
+enum SynchronousTradeSubmissionStatus
+{
+   SYNCHRONOUS_TRADE_SUBMISSION_NOT_EVALUATED,
+   SYNCHRONOUS_TRADE_SUBMISSION_INVALID_INPUT,
+   SYNCHRONOUS_TRADE_SUBMISSION_PERMISSION_EVALUATION_FAILED,
+   SYNCHRONOUS_TRADE_SUBMISSION_PERMISSION_BLOCKED,
+   SYNCHRONOUS_TRADE_SUBMISSION_ORDER_CHECK_REJECTED,
+   SYNCHRONOUS_TRADE_SUBMISSION_ORDER_SEND_EVALUATED
+};
+
+struct SynchronousTradeSubmissionResult
+{
+   bool orderSendAttempted;
+   SynchronousTradeSubmissionStatus status;
+
+   TradeSubmissionPermissionSnapshot permissionSnapshot;
+   TradeSubmissionPermissionResult permissionResult;
+
+   TradeRequestCheckResult requestCheckResult;
+   TradeSubmissionResult submissionResult;
+};
+
+void ResetSynchronousTradeSubmissionResult(
+   SynchronousTradeSubmissionResult &result
+)
+{
+   result.orderSendAttempted = false;
+   result.status =
+      SYNCHRONOUS_TRADE_SUBMISSION_NOT_EVALUATED;
+
+   ResetTradeSubmissionPermissionSnapshot(
+      result.permissionSnapshot
+   );
+
+   ResetTradeSubmissionPermissionResult(
+      result.permissionResult
+   );
+
+   ResetTradeRequestCheckResult(
+      result.requestCheckResult
+   );
+
+   ResetTradeSubmissionResult(
+      result.submissionResult
+   );
+}
+
+bool ExecuteSynchronousMarketSubmission(
+   const MarketTradeRequestBuildResult &requestBuild,
+   SynchronousTradeSubmissionResult &result
+)
+{
+   ResetSynchronousTradeSubmissionResult(
+      result
+   );
+
+   if(
+      !requestBuild.valid ||
+      requestBuild.status !=
+         MARKET_REQUEST_BUILD_VALID
+   )
+   {
+      Print(
+         "Cannot execute synchronous market submission from an invalid request build."
+      );
+
+      result.status =
+         SYNCHRONOUS_TRADE_SUBMISSION_INVALID_INPUT;
+
+      return(false);
+   }
+
+   if(!EvaluateCurrentTradeSubmissionPermissions(
+      result.permissionSnapshot,
+      result.permissionResult
+   ))
+   {
+      Print(
+         "Trade-submission permission evaluation failed."
+      );
+
+      result.status =
+         SYNCHRONOUS_TRADE_SUBMISSION_PERMISSION_EVALUATION_FAILED;
+
+      return(false);
+   }
+
+   if(!result.permissionResult.allowed)
+   {
+      PrintFormat(
+         "Trade submission blocked by permissions | status=%s",
+         EnumToString(
+            result.permissionResult.status
+         )
+      );
+
+      result.status =
+         SYNCHRONOUS_TRADE_SUBMISSION_PERMISSION_BLOCKED;
+
+      return(true);
+   }
+
+   MqlTradeRequest request =
+      requestBuild.request;
+
+   MqlTradeCheckResult nativeCheckResult = {};
+
+   ResetLastError();
+
+   const bool checkPassed =
+      OrderCheck(
+         request,
+         nativeCheckResult
+      );
+
+   result.requestCheckResult.lastError =
+      GetLastError();
+
+   result.requestCheckResult.checkResult =
+      nativeCheckResult;
+
+   if(!checkPassed)
+   {
+      result.requestCheckResult.allowed = false;
+      result.requestCheckResult.status =
+         TRADE_REQUEST_CHECK_REJECTED;
+
+      result.status =
+         SYNCHRONOUS_TRADE_SUBMISSION_ORDER_CHECK_REJECTED;
+
+      PrintFormat(
+         "Final OrderCheck rejected request | last_error=%d | retcode=%u | comment=%s",
+         result.requestCheckResult.lastError,
+         result.requestCheckResult.checkResult.retcode,
+         result.requestCheckResult.checkResult.comment
+      );
+
+      return(true);
+   }
+
+   result.requestCheckResult.allowed = true;
+   result.requestCheckResult.status =
+      TRADE_REQUEST_CHECK_PASSED;
+
+   MqlTradeResult nativeTradeResult = {};
+
+   ResetLastError();
+
+   const bool orderSendReturnedTrue =
+      OrderSend(
+         request,
+         nativeTradeResult
+      );
+
+   const int orderSendLastError =
+      GetLastError();
+
+   result.orderSendAttempted = true;
+
+   ClassifyImmediateTradeSubmissionResult(
+      orderSendReturnedTrue,
+      orderSendLastError,
+      nativeTradeResult,
+      result.submissionResult
+   );
+
+   result.status =
+      SYNCHRONOUS_TRADE_SUBMISSION_ORDER_SEND_EVALUATED;
+
+   return(true);
+}
+
 #endif
