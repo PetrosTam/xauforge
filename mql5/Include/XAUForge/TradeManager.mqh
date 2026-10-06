@@ -2599,4 +2599,104 @@ bool BuildMarketTradeRequest(
    return(true);
 }
 
+enum TradeRequestCheckStatus
+{
+   TRADE_REQUEST_CHECK_NOT_EVALUATED,
+   TRADE_REQUEST_CHECK_PASSED,
+   TRADE_REQUEST_CHECK_REJECTED,
+   TRADE_REQUEST_CHECK_INVALID_INPUT
+};
+
+struct TradeRequestCheckResult
+{
+   bool allowed;
+   TradeRequestCheckStatus status;
+
+   int lastError;
+
+   MqlTradeCheckResult checkResult;
+};
+
+void ResetTradeRequestCheckResult(
+   TradeRequestCheckResult &result
+)
+{
+   result.allowed = false;
+   result.status =
+      TRADE_REQUEST_CHECK_NOT_EVALUATED;
+
+   result.lastError = 0;
+
+   ZeroMemory(
+      result.checkResult
+   );
+}
+
+bool EvaluateTradeRequestCheck(
+   const MarketTradeRequestBuildResult &requestBuild,
+   TradeRequestCheckResult &result
+)
+{
+   ResetTradeRequestCheckResult(
+      result
+   );
+
+   if(
+      !requestBuild.valid ||
+      requestBuild.status !=
+         MARKET_REQUEST_BUILD_VALID
+   )
+   {
+      Print(
+         "Cannot evaluate OrderCheck from an invalid market trade request."
+      );
+
+      result.status =
+         TRADE_REQUEST_CHECK_INVALID_INPUT;
+
+      return(false);
+   }
+
+   MqlTradeRequest request =
+      requestBuild.request;
+
+   MqlTradeCheckResult checkResult = {};
+
+   ResetLastError();
+
+   const bool checkPassed =
+      OrderCheck(
+         request,
+         checkResult
+      );
+
+   result.lastError =
+      GetLastError();
+
+   result.checkResult =
+      checkResult;
+
+   if(!checkPassed)
+   {
+      result.allowed = false;
+      result.status =
+         TRADE_REQUEST_CHECK_REJECTED;
+
+      PrintFormat(
+         "OrderCheck rejected request | last_error=%d | retcode=%u | comment=%s",
+         result.lastError,
+         result.checkResult.retcode,
+         result.checkResult.comment
+      );
+
+      return(true);
+   }
+
+   result.allowed = true;
+   result.status =
+      TRADE_REQUEST_CHECK_PASSED;
+
+   return(true);
+}
+
 #endif
