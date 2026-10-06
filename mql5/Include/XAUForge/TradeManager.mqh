@@ -2699,4 +2699,208 @@ bool EvaluateTradeRequestCheck(
    return(true);
 }
 
+struct TradeSubmissionPermissionSnapshot
+{
+   bool valid;
+
+   bool testerMode;
+
+   bool terminalConnected;
+   bool terminalTradeAllowed;
+   bool programTradeAllowed;
+
+   bool accountTradeAllowed;
+   bool accountExpertTradeAllowed;
+};
+
+enum TradeSubmissionPermissionStatus
+{
+   TRADE_SUBMISSION_PERMISSION_NOT_EVALUATED,
+   TRADE_SUBMISSION_PERMISSION_ALLOWED,
+   TRADE_SUBMISSION_PERMISSION_TERMINAL_DISCONNECTED,
+   TRADE_SUBMISSION_PERMISSION_TERMINAL_TRADING_DISABLED,
+   TRADE_SUBMISSION_PERMISSION_PROGRAM_TRADING_DISABLED,
+   TRADE_SUBMISSION_PERMISSION_ACCOUNT_TRADING_DISABLED,
+   TRADE_SUBMISSION_PERMISSION_ACCOUNT_EXPERT_TRADING_DISABLED,
+   TRADE_SUBMISSION_PERMISSION_INVALID_INPUT
+};
+
+struct TradeSubmissionPermissionResult
+{
+   bool allowed;
+   TradeSubmissionPermissionStatus status;
+};
+
+void ResetTradeSubmissionPermissionSnapshot(
+   TradeSubmissionPermissionSnapshot &snapshot
+)
+{
+   snapshot.valid = false;
+
+   snapshot.testerMode = false;
+
+   snapshot.terminalConnected = false;
+   snapshot.terminalTradeAllowed = false;
+   snapshot.programTradeAllowed = false;
+
+   snapshot.accountTradeAllowed = false;
+   snapshot.accountExpertTradeAllowed = false;
+}
+
+void ResetTradeSubmissionPermissionResult(
+   TradeSubmissionPermissionResult &result
+)
+{
+   result.allowed = false;
+   result.status =
+      TRADE_SUBMISSION_PERMISSION_NOT_EVALUATED;
+}
+
+bool LoadCurrentTradeSubmissionPermissions(
+   TradeSubmissionPermissionSnapshot &snapshot
+)
+{
+   ResetTradeSubmissionPermissionSnapshot(
+      snapshot
+   );
+
+   snapshot.testerMode =
+      (bool)MQLInfoInteger(
+         MQL_TESTER
+      );
+
+   snapshot.terminalConnected =
+      (bool)TerminalInfoInteger(
+         TERMINAL_CONNECTED
+      );
+
+   snapshot.terminalTradeAllowed =
+      (bool)TerminalInfoInteger(
+         TERMINAL_TRADE_ALLOWED
+      );
+
+   snapshot.programTradeAllowed =
+      (bool)MQLInfoInteger(
+         MQL_TRADE_ALLOWED
+      );
+
+   snapshot.accountTradeAllowed =
+      (bool)AccountInfoInteger(
+         ACCOUNT_TRADE_ALLOWED
+      );
+
+   snapshot.accountExpertTradeAllowed =
+      (bool)AccountInfoInteger(
+         ACCOUNT_TRADE_EXPERT
+      );
+
+   snapshot.valid = true;
+
+   return(true);
+}
+
+bool EvaluateTradeSubmissionPermissions(
+   const TradeSubmissionPermissionSnapshot &snapshot,
+   TradeSubmissionPermissionResult &result
+)
+{
+   ResetTradeSubmissionPermissionResult(
+      result
+   );
+
+   if(!snapshot.valid)
+   {
+      Print(
+         "Cannot evaluate trade-submission permissions from an invalid snapshot."
+      );
+
+      result.status =
+         TRADE_SUBMISSION_PERMISSION_INVALID_INPUT;
+
+      return(false);
+   }
+
+   if(
+      !snapshot.testerMode &&
+      !snapshot.terminalConnected
+   )
+   {
+      result.allowed = false;
+      result.status =
+         TRADE_SUBMISSION_PERMISSION_TERMINAL_DISCONNECTED;
+
+      return(true);
+   }
+
+   if(!snapshot.terminalTradeAllowed)
+   {
+      result.allowed = false;
+      result.status =
+         TRADE_SUBMISSION_PERMISSION_TERMINAL_TRADING_DISABLED;
+
+      return(true);
+   }
+
+   if(!snapshot.programTradeAllowed)
+   {
+      result.allowed = false;
+      result.status =
+         TRADE_SUBMISSION_PERMISSION_PROGRAM_TRADING_DISABLED;
+
+      return(true);
+   }
+
+   if(!snapshot.accountTradeAllowed)
+   {
+      result.allowed = false;
+      result.status =
+         TRADE_SUBMISSION_PERMISSION_ACCOUNT_TRADING_DISABLED;
+
+      return(true);
+   }
+
+   if(!snapshot.accountExpertTradeAllowed)
+   {
+      result.allowed = false;
+      result.status =
+         TRADE_SUBMISSION_PERMISSION_ACCOUNT_EXPERT_TRADING_DISABLED;
+
+      return(true);
+   }
+
+   result.allowed = true;
+   result.status =
+      TRADE_SUBMISSION_PERMISSION_ALLOWED;
+
+   return(true);
+}
+
+bool EvaluateCurrentTradeSubmissionPermissions(
+   TradeSubmissionPermissionSnapshot &snapshot,
+   TradeSubmissionPermissionResult &result
+)
+{
+   ResetTradeSubmissionPermissionSnapshot(
+      snapshot
+   );
+
+   ResetTradeSubmissionPermissionResult(
+      result
+   );
+
+   if(!LoadCurrentTradeSubmissionPermissions(
+      snapshot
+   ))
+   {
+      return(false);
+   }
+
+   return(
+      EvaluateTradeSubmissionPermissions(
+         snapshot,
+         result
+      )
+   );
+}
+
 #endif
