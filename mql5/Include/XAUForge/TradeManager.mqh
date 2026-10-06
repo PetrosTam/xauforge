@@ -2903,4 +2903,157 @@ bool EvaluateCurrentTradeSubmissionPermissions(
    );
 }
 
+enum TradeSubmissionStatus
+{
+   TRADE_SUBMISSION_NOT_EVALUATED,
+   TRADE_SUBMISSION_ORDER_SEND_CALL_FAILED,
+   TRADE_SUBMISSION_SERVER_PLACED,
+   TRADE_SUBMISSION_SERVER_DONE,
+   TRADE_SUBMISSION_SERVER_DONE_PARTIAL,
+   TRADE_SUBMISSION_SERVER_NON_SUCCESS,
+   TRADE_SUBMISSION_SERVER_UNKNOWN
+};
+
+struct TradeSubmissionResult
+{
+   bool orderSendReturnedTrue;
+   TradeSubmissionStatus status;
+
+   int lastError;
+
+   MqlTradeResult tradeResult;
+};
+
+void ResetTradeSubmissionResult(
+   TradeSubmissionResult &result
+)
+{
+   result.orderSendReturnedTrue = false;
+   result.status =
+      TRADE_SUBMISSION_NOT_EVALUATED;
+
+   result.lastError = 0;
+
+   ZeroMemory(
+      result.tradeResult
+   );
+}
+
+bool IsKnownTradeServerNonSuccessRetcode(
+   const uint retcode
+)
+{
+   switch(retcode)
+   {
+      case TRADE_RETCODE_REQUOTE:
+      case TRADE_RETCODE_REJECT:
+      case TRADE_RETCODE_CANCEL:
+      case TRADE_RETCODE_ERROR:
+      case TRADE_RETCODE_TIMEOUT:
+      case TRADE_RETCODE_INVALID:
+      case TRADE_RETCODE_INVALID_VOLUME:
+      case TRADE_RETCODE_INVALID_PRICE:
+      case TRADE_RETCODE_INVALID_STOPS:
+      case TRADE_RETCODE_TRADE_DISABLED:
+      case TRADE_RETCODE_MARKET_CLOSED:
+      case TRADE_RETCODE_NO_MONEY:
+      case TRADE_RETCODE_PRICE_CHANGED:
+      case TRADE_RETCODE_PRICE_OFF:
+      case TRADE_RETCODE_INVALID_EXPIRATION:
+      case TRADE_RETCODE_ORDER_CHANGED:
+      case TRADE_RETCODE_TOO_MANY_REQUESTS:
+      case TRADE_RETCODE_NO_CHANGES:
+      case TRADE_RETCODE_SERVER_DISABLES_AT:
+      case TRADE_RETCODE_CLIENT_DISABLES_AT:
+      case TRADE_RETCODE_LOCKED:
+      case TRADE_RETCODE_FROZEN:
+      case TRADE_RETCODE_INVALID_FILL:
+      case TRADE_RETCODE_CONNECTION:
+      case TRADE_RETCODE_ONLY_REAL:
+      case TRADE_RETCODE_LIMIT_ORDERS:
+      case TRADE_RETCODE_LIMIT_VOLUME:
+      case TRADE_RETCODE_INVALID_ORDER:
+      case TRADE_RETCODE_POSITION_CLOSED:
+      case TRADE_RETCODE_INVALID_CLOSE_VOLUME:
+      case TRADE_RETCODE_CLOSE_ORDER_EXIST:
+      case TRADE_RETCODE_LIMIT_POSITIONS:
+      case TRADE_RETCODE_REJECT_CANCEL:
+      case TRADE_RETCODE_LONG_ONLY:
+      case TRADE_RETCODE_SHORT_ONLY:
+      case TRADE_RETCODE_CLOSE_ONLY:
+      case TRADE_RETCODE_FIFO_CLOSE:
+      case TRADE_RETCODE_HEDGE_PROHIBITED:
+         return(true);
+
+      default:
+         return(false);
+   }
+}
+
+void ClassifyImmediateTradeSubmissionResult(
+   const bool orderSendReturnedTrue,
+   const int lastError,
+   const MqlTradeResult &tradeResult,
+   TradeSubmissionResult &result
+)
+{
+   ResetTradeSubmissionResult(
+      result
+   );
+
+   result.orderSendReturnedTrue =
+      orderSendReturnedTrue;
+
+   result.lastError =
+      lastError;
+
+   result.tradeResult =
+      tradeResult;
+
+   if(!orderSendReturnedTrue)
+   {
+      result.status =
+         TRADE_SUBMISSION_ORDER_SEND_CALL_FAILED;
+
+      return;
+   }
+
+   switch(tradeResult.retcode)
+   {
+      case TRADE_RETCODE_PLACED:
+         result.status =
+            TRADE_SUBMISSION_SERVER_PLACED;
+
+         return;
+
+      case TRADE_RETCODE_DONE:
+         result.status =
+            TRADE_SUBMISSION_SERVER_DONE;
+
+         return;
+
+      case TRADE_RETCODE_DONE_PARTIAL:
+         result.status =
+            TRADE_SUBMISSION_SERVER_DONE_PARTIAL;
+
+         return;
+
+      default:
+         break;
+   }
+
+   if(IsKnownTradeServerNonSuccessRetcode(
+      tradeResult.retcode
+   ))
+   {
+      result.status =
+         TRADE_SUBMISSION_SERVER_NON_SUCCESS;
+
+      return;
+   }
+
+   result.status =
+      TRADE_SUBMISSION_SERVER_UNKNOWN;
+}
+
 #endif
