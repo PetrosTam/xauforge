@@ -2081,4 +2081,522 @@ bool EvaluateCurrentMarginCapacity(
    );
 }
 
+struct TradeRequestCapabilities
+{
+   bool valid;
+   string symbol;
+
+   ENUM_SYMBOL_TRADE_EXECUTION executionMode;
+
+   long orderMode;
+   long fillingMode;
+};
+
+void ResetTradeRequestCapabilities(
+   TradeRequestCapabilities &capabilities
+)
+{
+   capabilities.valid = false;
+   capabilities.symbol = "";
+
+   capabilities.executionMode =
+      SYMBOL_TRADE_EXECUTION_REQUEST;
+
+   capabilities.orderMode = 0;
+   capabilities.fillingMode = 0;
+}
+
+bool HasCapabilityFlag(
+   const long flags,
+   const long capabilityFlag
+)
+{
+   return(
+      (flags & capabilityFlag) ==
+      capabilityFlag
+   );
+}
+
+bool LoadCurrentTradeRequestCapabilities(
+   const string symbol,
+   TradeRequestCapabilities &capabilities
+)
+{
+   ResetTradeRequestCapabilities(
+      capabilities
+   );
+
+   if(StringLen(symbol) == 0)
+   {
+      Print(
+         "Cannot load trade-request capabilities for an empty symbol."
+      );
+
+      return(false);
+   }
+
+   long executionModeValue = 0;
+   long orderMode = 0;
+   long fillingMode = 0;
+
+   ResetLastError();
+
+   if(!SymbolInfoInteger(
+      symbol,
+      SYMBOL_TRADE_EXEMODE,
+      executionModeValue
+   ))
+   {
+      PrintFormat(
+         "Failed to obtain SYMBOL_TRADE_EXEMODE for %s. Error: %d",
+         symbol,
+         GetLastError()
+      );
+
+      return(false);
+   }
+
+   const ENUM_SYMBOL_TRADE_EXECUTION executionMode =
+      (ENUM_SYMBOL_TRADE_EXECUTION)
+      executionModeValue;
+
+   switch(executionMode)
+   {
+      case SYMBOL_TRADE_EXECUTION_REQUEST:
+      case SYMBOL_TRADE_EXECUTION_INSTANT:
+      case SYMBOL_TRADE_EXECUTION_MARKET:
+      case SYMBOL_TRADE_EXECUTION_EXCHANGE:
+         break;
+
+      default:
+         PrintFormat(
+            "Unsupported trade execution mode for %s: %d",
+            symbol,
+            (int)executionModeValue
+         );
+
+         return(false);
+   }
+
+   ResetLastError();
+
+   if(!SymbolInfoInteger(
+      symbol,
+      SYMBOL_ORDER_MODE,
+      orderMode
+   ))
+   {
+      PrintFormat(
+         "Failed to obtain SYMBOL_ORDER_MODE for %s. Error: %d",
+         symbol,
+         GetLastError()
+      );
+
+      return(false);
+   }
+
+   ResetLastError();
+
+   if(!SymbolInfoInteger(
+      symbol,
+      SYMBOL_FILLING_MODE,
+      fillingMode
+   ))
+   {
+      PrintFormat(
+         "Failed to obtain SYMBOL_FILLING_MODE for %s. Error: %d",
+         symbol,
+         GetLastError()
+      );
+
+      return(false);
+   }
+
+   if(
+      orderMode < 0 ||
+      fillingMode < 0
+   )
+   {
+      PrintFormat(
+         "Invalid trade-request capabilities | symbol=%s | execution_mode=%s | order_mode=%I64d | filling_mode=%I64d",
+         symbol,
+         EnumToString(executionMode),
+         orderMode,
+         fillingMode
+      );
+
+      return(false);
+   }
+
+   capabilities.valid = true;
+   capabilities.symbol = symbol;
+   capabilities.executionMode =
+      executionMode;
+   capabilities.orderMode =
+      orderMode;
+   capabilities.fillingMode =
+      fillingMode;
+
+   return(true);
+}
+
+enum FillingPolicySelectionStatus
+{
+   FILLING_POLICY_NOT_EVALUATED,
+   FILLING_POLICY_SELECTED_FOK,
+   FILLING_POLICY_SELECTED_IOC,
+   FILLING_POLICY_SELECTED_RETURN,
+   FILLING_POLICY_NO_SUPPORTED_MODE,
+   FILLING_POLICY_INVALID_INPUT
+};
+
+struct FillingPolicySelectionResult
+{
+   bool selected;
+   FillingPolicySelectionStatus status;
+
+   ENUM_ORDER_TYPE_FILLING fillingPolicy;
+};
+
+void ResetFillingPolicySelectionResult(
+   FillingPolicySelectionResult &result
+)
+{
+   result.selected = false;
+   result.status =
+      FILLING_POLICY_NOT_EVALUATED;
+
+   result.fillingPolicy =
+      ORDER_FILLING_FOK;
+}
+
+bool SelectSupportedMarketFillingPolicy(
+   const TradeRequestCapabilities &capabilities,
+   FillingPolicySelectionResult &result
+)
+{
+   ResetFillingPolicySelectionResult(
+      result
+   );
+
+   if(
+      !capabilities.valid ||
+      StringLen(capabilities.symbol) == 0 ||
+      capabilities.orderMode < 0 ||
+      capabilities.fillingMode < 0
+   )
+   {
+      result.status =
+         FILLING_POLICY_INVALID_INPUT;
+
+      return(false);
+   }
+
+   switch(capabilities.executionMode)
+   {
+      case SYMBOL_TRADE_EXECUTION_REQUEST:
+      case SYMBOL_TRADE_EXECUTION_INSTANT:
+      {
+         result.selected = true;
+         result.status =
+            FILLING_POLICY_SELECTED_FOK;
+         result.fillingPolicy =
+            ORDER_FILLING_FOK;
+
+         return(true);
+      }
+
+      case SYMBOL_TRADE_EXECUTION_MARKET:
+      {
+         if(HasCapabilityFlag(
+            capabilities.fillingMode,
+            (long)SYMBOL_FILLING_FOK
+         ))
+         {
+            result.selected = true;
+            result.status =
+               FILLING_POLICY_SELECTED_FOK;
+            result.fillingPolicy =
+               ORDER_FILLING_FOK;
+
+            return(true);
+         }
+
+         if(HasCapabilityFlag(
+            capabilities.fillingMode,
+            (long)SYMBOL_FILLING_IOC
+         ))
+         {
+            result.selected = true;
+            result.status =
+               FILLING_POLICY_SELECTED_IOC;
+            result.fillingPolicy =
+               ORDER_FILLING_IOC;
+
+            return(true);
+         }
+
+         result.status =
+            FILLING_POLICY_NO_SUPPORTED_MODE;
+
+         return(false);
+      }
+
+      case SYMBOL_TRADE_EXECUTION_EXCHANGE:
+      {
+         if(HasCapabilityFlag(
+            capabilities.fillingMode,
+            (long)SYMBOL_FILLING_FOK
+         ))
+         {
+            result.selected = true;
+            result.status =
+               FILLING_POLICY_SELECTED_FOK;
+            result.fillingPolicy =
+               ORDER_FILLING_FOK;
+
+            return(true);
+         }
+
+         if(HasCapabilityFlag(
+            capabilities.fillingMode,
+            (long)SYMBOL_FILLING_IOC
+         ))
+         {
+            result.selected = true;
+            result.status =
+               FILLING_POLICY_SELECTED_IOC;
+            result.fillingPolicy =
+               ORDER_FILLING_IOC;
+
+            return(true);
+         }
+
+         result.selected = true;
+         result.status =
+            FILLING_POLICY_SELECTED_RETURN;
+         result.fillingPolicy =
+            ORDER_FILLING_RETURN;
+
+         return(true);
+      }
+
+      default:
+         result.status =
+            FILLING_POLICY_INVALID_INPUT;
+
+         return(false);
+   }
+}
+
+enum MarketTradeRequestBuildStatus
+{
+   MARKET_REQUEST_BUILD_NOT_EVALUATED,
+   MARKET_REQUEST_BUILD_VALID,
+   MARKET_REQUEST_BUILD_INVALID_INPUT,
+   MARKET_REQUEST_BUILD_MARKET_ORDER_UNSUPPORTED,
+   MARKET_REQUEST_BUILD_STOP_LOSS_UNSUPPORTED,
+   MARKET_REQUEST_BUILD_TAKE_PROFIT_UNSUPPORTED,
+   MARKET_REQUEST_BUILD_FILLING_UNSUPPORTED
+};
+
+struct MarketTradeRequestBuildResult
+{
+   bool valid;
+   MarketTradeRequestBuildStatus status;
+
+   ENUM_ORDER_TYPE_FILLING fillingPolicy;
+
+   MqlTradeRequest request;
+};
+
+void ResetMarketTradeRequestBuildResult(
+   MarketTradeRequestBuildResult &result
+)
+{
+   result.valid = false;
+   result.status =
+      MARKET_REQUEST_BUILD_NOT_EVALUATED;
+
+   result.fillingPolicy =
+      ORDER_FILLING_FOK;
+
+   ZeroMemory(
+      result.request
+   );
+}
+
+bool BuildMarketTradeRequest(
+   const string symbol,
+   const FinalTradeGeometry &geometry,
+   const FinalRiskSizingResult &riskSizing,
+   const TradeRequestCapabilities &capabilities,
+   const ulong magicNumber,
+   const ulong deviationPoints,
+   MarketTradeRequestBuildResult &result
+)
+{
+   ResetMarketTradeRequestBuildResult(
+      result
+   );
+
+   if(
+      StringLen(symbol) == 0 ||
+      !ValidateFinalTradeGeometryForRiskSizing(
+         geometry
+      ) ||
+      !ValidateFinalRiskSizingForMargin(
+         riskSizing
+      ) ||
+      !capabilities.valid ||
+      capabilities.symbol != symbol
+   )
+   {
+      Print(
+         "Cannot build market trade request from invalid input."
+      );
+
+      result.status =
+         MARKET_REQUEST_BUILD_INVALID_INPUT;
+
+      return(false);
+   }
+
+   if(!HasCapabilityFlag(
+      capabilities.orderMode,
+      (long)SYMBOL_ORDER_MARKET
+   ))
+   {
+      PrintFormat(
+         "Market orders are not supported for %s.",
+         symbol
+      );
+
+      result.status =
+         MARKET_REQUEST_BUILD_MARKET_ORDER_UNSUPPORTED;
+
+      return(false);
+   }
+
+   if(!HasCapabilityFlag(
+      capabilities.orderMode,
+      (long)SYMBOL_ORDER_SL
+   ))
+   {
+      PrintFormat(
+         "Stop Loss is not supported for %s.",
+         symbol
+      );
+
+      result.status =
+         MARKET_REQUEST_BUILD_STOP_LOSS_UNSUPPORTED;
+
+      return(false);
+   }
+
+   if(!HasCapabilityFlag(
+      capabilities.orderMode,
+      (long)SYMBOL_ORDER_TP
+   ))
+   {
+      PrintFormat(
+         "Take Profit is not supported for %s.",
+         symbol
+      );
+
+      result.status =
+         MARKET_REQUEST_BUILD_TAKE_PROFIT_UNSUPPORTED;
+
+      return(false);
+   }
+
+   FillingPolicySelectionResult fillingResult;
+
+   if(!SelectSupportedMarketFillingPolicy(
+      capabilities,
+      fillingResult
+   ))
+   {
+      PrintFormat(
+         "No supported market filling policy for %s | execution_mode=%s | filling_mode=%I64d",
+         symbol,
+         EnumToString(
+            capabilities.executionMode
+         ),
+         capabilities.fillingMode
+      );
+
+      result.status =
+         MARKET_REQUEST_BUILD_FILLING_UNSUPPORTED;
+
+      return(false);
+   }
+
+   MqlTradeRequest request = {};
+
+   request.action =
+      TRADE_ACTION_DEAL;
+
+   request.magic =
+      magicNumber;
+
+   request.symbol =
+      symbol;
+
+   request.volume =
+      riskSizing.normalizedVolume;
+
+   request.sl =
+      geometry.stopLossPrice;
+
+   request.tp =
+      geometry.takeProfitPrice;
+
+   request.type =
+      (geometry.direction == SIGNAL_BUY)
+      ? ORDER_TYPE_BUY
+      : ORDER_TYPE_SELL;
+
+   request.type_filling =
+      fillingResult.fillingPolicy;
+
+   switch(capabilities.executionMode)
+   {
+      case SYMBOL_TRADE_EXECUTION_REQUEST:
+      case SYMBOL_TRADE_EXECUTION_INSTANT:
+         request.price =
+            geometry.entryPrice;
+
+         request.deviation =
+            deviationPoints;
+
+         break;
+
+      case SYMBOL_TRADE_EXECUTION_MARKET:
+      case SYMBOL_TRADE_EXECUTION_EXCHANGE:
+         request.price = 0.0;
+         request.deviation = 0;
+
+         break;
+
+      default:
+         result.status =
+            MARKET_REQUEST_BUILD_INVALID_INPUT;
+
+         return(false);
+   }
+
+   result.request =
+      request;
+
+   result.fillingPolicy =
+      fillingResult.fillingPolicy;
+
+   result.valid = true;
+   result.status =
+      MARKET_REQUEST_BUILD_VALID;
+
+   return(true);
+}
+
 #endif
