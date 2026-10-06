@@ -1592,4 +1592,209 @@ bool BuildFinalTradeGeometry(
    return(true);
 }
 
+enum FinalRiskSizingStatus
+{
+   FINAL_RISK_SIZING_NOT_EVALUATED,
+   FINAL_RISK_SIZING_VALID,
+   FINAL_RISK_SIZING_INVALID_INPUT,
+   FINAL_RISK_SIZING_RAW_CALCULATION_FAILED,
+   FINAL_RISK_SIZING_NORMALIZATION_FAILED
+};
+
+struct FinalRiskSizingResult
+{
+   bool valid;
+   FinalRiskSizingStatus status;
+
+   RiskSizingResult sizing;
+   double normalizedVolume;
+};
+
+void ResetFinalRiskSizingResult(
+   FinalRiskSizingResult &result
+)
+{
+   result.valid = false;
+   result.status =
+      FINAL_RISK_SIZING_NOT_EVALUATED;
+
+   result.sizing.equity = 0.0;
+   result.sizing.plannedRiskAmount = 0.0;
+   result.sizing.referenceVolume = 0.0;
+   result.sizing.lossForReferenceVolume = 0.0;
+   result.sizing.rawVolume = 0.0;
+
+   result.normalizedVolume = 0.0;
+}
+
+bool ValidateFinalTradeGeometryForRiskSizing(
+   const FinalTradeGeometry &geometry
+)
+{
+   if(
+      !geometry.valid ||
+      geometry.status != TRADE_GEOMETRY_VALID ||
+      (
+         geometry.direction != SIGNAL_BUY &&
+         geometry.direction != SIGNAL_SELL
+      ) ||
+      !MathIsValidNumber(geometry.entryPrice) ||
+      !MathIsValidNumber(geometry.stopLossPrice) ||
+      !MathIsValidNumber(geometry.takeProfitPrice) ||
+      !MathIsValidNumber(geometry.finalStopDistance) ||
+      geometry.entryPrice <= 0.0 ||
+      geometry.stopLossPrice <= 0.0 ||
+      geometry.takeProfitPrice <= 0.0 ||
+      geometry.finalStopDistance <= 0.0
+   )
+   {
+      return(false);
+   }
+
+   if(
+      geometry.direction == SIGNAL_BUY &&
+      (
+         geometry.stopLossPrice >=
+            geometry.entryPrice ||
+         geometry.takeProfitPrice <=
+            geometry.entryPrice
+      )
+   )
+   {
+      return(false);
+   }
+
+   if(
+      geometry.direction == SIGNAL_SELL &&
+      (
+         geometry.stopLossPrice <=
+            geometry.entryPrice ||
+         geometry.takeProfitPrice >=
+            geometry.entryPrice
+      )
+   )
+   {
+      return(false);
+   }
+
+   const double observedStopDistance =
+      MathAbs(
+         geometry.entryPrice -
+         geometry.stopLossPrice
+      );
+
+   if(
+      !MathIsValidNumber(observedStopDistance) ||
+      observedStopDistance <= 0.0
+   )
+   {
+      return(false);
+   }
+
+   const double stopDistanceTolerance =
+      CalculatePriceComparisonTolerance(
+         observedStopDistance,
+         geometry.finalStopDistance
+      );
+
+   if(
+      MathAbs(
+         observedStopDistance -
+         geometry.finalStopDistance
+      ) >
+      stopDistanceTolerance
+   )
+   {
+      return(false);
+   }
+
+   return(true);
+}
+
+bool CalculateFinalRiskSizing(
+   const string symbol,
+   const FinalTradeGeometry &geometry,
+   const double equity,
+   const double riskPercent,
+   const double volumeMin,
+   const double volumeMax,
+   const double volumeStep,
+   FinalRiskSizingResult &result
+)
+{
+   ResetFinalRiskSizingResult(result);
+
+   if(
+      StringLen(symbol) == 0 ||
+      !ValidateFinalTradeGeometryForRiskSizing(
+         geometry
+      )
+   )
+   {
+      Print(
+         "Cannot calculate final risk sizing from invalid input."
+      );
+
+      result.status =
+         FINAL_RISK_SIZING_INVALID_INPUT;
+
+      return(false);
+   }
+
+   RiskSizingResult sizingResult;
+
+   if(!CalculateRawRiskVolume(
+      symbol,
+      geometry.direction,
+      geometry.entryPrice,
+      geometry.stopLossPrice,
+      equity,
+      riskPercent,
+      volumeMin,
+      sizingResult
+   ))
+   {
+      Print(
+         "Final raw risk-volume calculation failed."
+      );
+
+      result.status =
+         FINAL_RISK_SIZING_RAW_CALCULATION_FAILED;
+
+      return(false);
+   }
+
+   double normalizedVolume = 0.0;
+
+   if(!NormalizeRiskVolumeDown(
+      sizingResult.rawVolume,
+      volumeMin,
+      volumeMax,
+      volumeStep,
+      normalizedVolume
+   ))
+   {
+      Print(
+         "Final risk-volume normalization failed."
+      );
+
+      result.status =
+         FINAL_RISK_SIZING_NORMALIZATION_FAILED;
+
+      return(false);
+   }
+
+   result.sizing =
+      sizingResult;
+
+   result.normalizedVolume =
+      normalizedVolume;
+
+   result.valid = true;
+   result.status =
+      FINAL_RISK_SIZING_VALID;
+
+   return(true);
+}
+
 #endif
