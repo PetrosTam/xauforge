@@ -1382,6 +1382,25 @@ bool BuildFinalTradeGeometry(
 
          return(false);
       }
+
+      if(normalizedStopLoss >= snapshot.bid)
+      {
+         const double strictStopLossCandidate =
+            snapshot.bid -
+            constraints.tickSize;
+
+         if(!NormalizePriceDownToTick(
+            strictStopLossCandidate,
+            constraints,
+            normalizedStopLoss
+         ))
+         {
+            geometry.status =
+               TRADE_GEOMETRY_NORMALIZATION_FAILED;
+
+            return(false);
+         }
+      }
    }
    else
    {
@@ -1409,6 +1428,25 @@ bool BuildFinalTradeGeometry(
             TRADE_GEOMETRY_NORMALIZATION_FAILED;
 
          return(false);
+      }
+
+      if(normalizedStopLoss <= snapshot.ask)
+      {
+         const double strictStopLossCandidate =
+            snapshot.ask +
+            constraints.tickSize;
+
+         if(!NormalizePriceUpToTick(
+            strictStopLossCandidate,
+            constraints,
+            normalizedStopLoss
+         ))
+         {
+            geometry.status =
+               TRADE_GEOMETRY_NORMALIZATION_FAILED;
+
+            return(false);
+         }
       }
    }
 
@@ -3226,6 +3264,414 @@ bool ExecuteSynchronousMarketSubmission(
       SYNCHRONOUS_TRADE_SUBMISSION_ORDER_SEND_EVALUATED;
 
    return(true);
+}
+
+enum TradeExecutionStatus
+{
+   TRADE_EXECUTION_NOT_EVALUATED,
+   TRADE_EXECUTION_INVALID_INPUT,
+   TRADE_EXECUTION_SETTINGS_INVALID,
+   TRADE_EXECUTION_MARKET_SNAPSHOT_FAILED,
+   TRADE_EXECUTION_SPREAD_EVALUATION_FAILED,
+   TRADE_EXECUTION_SPREAD_BLOCKED,
+   TRADE_EXECUTION_TRADE_MODE_LOAD_FAILED,
+   TRADE_EXECUTION_TRADE_MODE_EVALUATION_FAILED,
+   TRADE_EXECUTION_TRADE_MODE_BLOCKED,
+   TRADE_EXECUTION_SESSION_EVALUATION_FAILED,
+   TRADE_EXECUTION_SESSION_BLOCKED,
+   TRADE_EXECUTION_DISTANCE_CONSTRAINTS_FAILED,
+   TRADE_EXECUTION_GEOMETRY_BUILD_FAILED,
+   TRADE_EXECUTION_ACCOUNT_EQUITY_INVALID,
+   TRADE_EXECUTION_FINAL_RISK_SIZING_FAILED,
+   TRADE_EXECUTION_MARGIN_EVALUATION_FAILED,
+   TRADE_EXECUTION_MARGIN_BLOCKED,
+   TRADE_EXECUTION_REQUEST_CAPABILITIES_FAILED,
+   TRADE_EXECUTION_REQUEST_BUILD_FAILED,
+   TRADE_EXECUTION_SUBMISSION_EVALUATION_FAILED,
+   TRADE_EXECUTION_SUBMISSION_PERMISSION_BLOCKED,
+   TRADE_EXECUTION_ORDER_CHECK_REJECTED,
+   TRADE_EXECUTION_ORDER_SEND_EVALUATED
+};
+
+struct TradeExecutionResult
+{
+   TradeExecutionStatus status;
+
+   PreTradeMarketSnapshot marketSnapshot;
+   SpreadGateResult spreadGate;
+
+   ENUM_SYMBOL_TRADE_MODE tradeMode;
+   TradeModeGateResult tradeModeGate;
+
+   datetime brokerTime;
+   TradeSessionGateResult sessionGate;
+
+   TradeDistanceConstraints distanceConstraints;
+   FinalTradeGeometry geometry;
+
+   double equity;
+   FinalRiskSizingResult riskSizing;
+
+   MarginValidationResult marginValidation;
+
+   TradeRequestCapabilities requestCapabilities;
+   MarketTradeRequestBuildResult requestBuild;
+
+   SynchronousTradeSubmissionResult submission;
+};
+
+void ResetTradeExecutionResult(
+   TradeExecutionResult &result
+)
+{
+   result.status =
+      TRADE_EXECUTION_NOT_EVALUATED;
+
+   ResetPreTradeMarketSnapshot(
+      result.marketSnapshot
+   );
+
+   ResetSpreadGateResult(
+      result.spreadGate
+   );
+
+   result.tradeMode =
+      SYMBOL_TRADE_MODE_DISABLED;
+
+   ResetTradeModeGateResult(
+      result.tradeModeGate
+   );
+
+   result.brokerTime = 0;
+
+   ResetTradeSessionGateResult(
+      result.sessionGate
+   );
+
+   ResetTradeDistanceConstraints(
+      result.distanceConstraints
+   );
+
+   ResetFinalTradeGeometry(
+      result.geometry
+   );
+
+   result.equity = 0.0;
+
+   ResetFinalRiskSizingResult(
+      result.riskSizing
+   );
+
+   ResetMarginValidationResult(
+      result.marginValidation
+   );
+
+   ResetTradeRequestCapabilities(
+      result.requestCapabilities
+   );
+
+   ResetMarketTradeRequestBuildResult(
+      result.requestBuild
+   );
+
+   ResetSynchronousTradeSubmissionResult(
+      result.submission
+   );
+}
+
+bool ExecuteApprovedTradeIntent(
+   const string symbol,
+   const RiskTradePlan &riskPlan,
+   const double riskPercent,
+   const double riskRewardRatio,
+   const double volumeMin,
+   const double volumeMax,
+   const double volumeStep,
+   const TradeExecutionSettings &executionSettings,
+   const ulong magicNumber,
+   const ulong deviationPoints,
+   TradeExecutionResult &result
+)
+{
+   ResetTradeExecutionResult(
+      result
+   );
+
+   if(StringLen(symbol) == 0)
+   {
+      Print(
+         "Cannot execute approved trade intent for an empty symbol."
+      );
+
+      result.status =
+         TRADE_EXECUTION_INVALID_INPUT;
+
+      return(false);
+   }
+
+   if(!ValidateTradeExecutionSettings(
+      executionSettings
+   ))
+   {
+      result.status =
+         TRADE_EXECUTION_SETTINGS_INVALID;
+
+      return(false);
+   }
+
+   if(!LoadPreTradeMarketSnapshot(
+      symbol,
+      result.marketSnapshot
+   ))
+   {
+      result.status =
+         TRADE_EXECUTION_MARKET_SNAPSHOT_FAILED;
+
+      return(false);
+   }
+
+   if(!EvaluateSpreadGate(
+      executionSettings,
+      result.marketSnapshot,
+      result.spreadGate
+   ))
+   {
+      result.status =
+         TRADE_EXECUTION_SPREAD_EVALUATION_FAILED;
+
+      return(false);
+   }
+
+   if(!result.spreadGate.allowed)
+   {
+      result.status =
+         TRADE_EXECUTION_SPREAD_BLOCKED;
+
+      return(true);
+   }
+
+   if(!LoadCurrentTradeMode(
+      symbol,
+      result.tradeMode
+   ))
+   {
+      result.status =
+         TRADE_EXECUTION_TRADE_MODE_LOAD_FAILED;
+
+      return(false);
+   }
+
+   if(!EvaluateTradeModeGate(
+      riskPlan.direction,
+      result.tradeMode,
+      result.tradeModeGate
+   ))
+   {
+      result.status =
+         TRADE_EXECUTION_TRADE_MODE_EVALUATION_FAILED;
+
+      return(false);
+   }
+
+   if(!result.tradeModeGate.allowed)
+   {
+      result.status =
+         TRADE_EXECUTION_TRADE_MODE_BLOCKED;
+
+      return(true);
+   }
+
+   if(result.marketSnapshot.timeMsc <= 0)
+   {
+      result.status =
+         TRADE_EXECUTION_SESSION_EVALUATION_FAILED;
+
+      return(false);
+   }
+
+   result.brokerTime =
+      (datetime)(
+         result.marketSnapshot.timeMsc /
+         1000
+      );
+
+   if(!EvaluateTradeSessionGate(
+      symbol,
+      result.brokerTime,
+      result.sessionGate
+   ))
+   {
+      result.status =
+         TRADE_EXECUTION_SESSION_EVALUATION_FAILED;
+
+      return(false);
+   }
+
+   if(!result.sessionGate.allowed)
+   {
+      result.status =
+         TRADE_EXECUTION_SESSION_BLOCKED;
+
+      return(true);
+   }
+
+   if(!LoadCurrentTradeDistanceConstraints(
+      symbol,
+      result.distanceConstraints
+   ))
+   {
+      result.status =
+         TRADE_EXECUTION_DISTANCE_CONSTRAINTS_FAILED;
+
+      return(false);
+   }
+
+   if(!BuildFinalTradeGeometry(
+      riskPlan,
+      riskRewardRatio,
+      result.marketSnapshot,
+      result.distanceConstraints,
+      result.geometry
+   ))
+   {
+      result.status =
+         TRADE_EXECUTION_GEOMETRY_BUILD_FAILED;
+
+      return(false);
+   }
+
+   result.equity =
+      AccountInfoDouble(
+         ACCOUNT_EQUITY
+      );
+
+   if(
+      !MathIsValidNumber(
+         result.equity
+      ) ||
+      result.equity <= 0.0
+   )
+   {
+      PrintFormat(
+         "Current account equity is invalid for final trade sizing: %G",
+         result.equity
+      );
+
+      result.status =
+         TRADE_EXECUTION_ACCOUNT_EQUITY_INVALID;
+
+      return(false);
+   }
+
+   if(!CalculateFinalRiskSizing(
+      symbol,
+      result.geometry,
+      result.equity,
+      riskPercent,
+      volumeMin,
+      volumeMax,
+      volumeStep,
+      result.riskSizing
+   ))
+   {
+      result.status =
+         TRADE_EXECUTION_FINAL_RISK_SIZING_FAILED;
+
+      return(false);
+   }
+
+   if(!EvaluateCurrentMarginCapacity(
+      symbol,
+      result.geometry,
+      result.riskSizing,
+      result.marginValidation
+   ))
+   {
+      result.status =
+         TRADE_EXECUTION_MARGIN_EVALUATION_FAILED;
+
+      return(false);
+   }
+
+   if(!result.marginValidation.allowed)
+   {
+      result.status =
+         TRADE_EXECUTION_MARGIN_BLOCKED;
+
+      return(true);
+   }
+
+   if(!LoadCurrentTradeRequestCapabilities(
+      symbol,
+      result.requestCapabilities
+   ))
+   {
+      result.status =
+         TRADE_EXECUTION_REQUEST_CAPABILITIES_FAILED;
+
+      return(false);
+   }
+
+   if(!BuildMarketTradeRequest(
+      symbol,
+      result.geometry,
+      result.riskSizing,
+      result.requestCapabilities,
+      magicNumber,
+      deviationPoints,
+      result.requestBuild
+   ))
+   {
+      result.status =
+         TRADE_EXECUTION_REQUEST_BUILD_FAILED;
+
+      return(false);
+   }
+
+   if(!ExecuteSynchronousMarketSubmission(
+      result.requestBuild,
+      result.submission
+   ))
+   {
+      result.status =
+         TRADE_EXECUTION_SUBMISSION_EVALUATION_FAILED;
+
+      return(false);
+   }
+
+   switch(result.submission.status)
+   {
+      case SYNCHRONOUS_TRADE_SUBMISSION_PERMISSION_BLOCKED:
+         result.status =
+            TRADE_EXECUTION_SUBMISSION_PERMISSION_BLOCKED;
+
+         return(true);
+
+      case SYNCHRONOUS_TRADE_SUBMISSION_ORDER_CHECK_REJECTED:
+         result.status =
+            TRADE_EXECUTION_ORDER_CHECK_REJECTED;
+
+         return(true);
+
+      case SYNCHRONOUS_TRADE_SUBMISSION_ORDER_SEND_EVALUATED:
+         result.status =
+            TRADE_EXECUTION_ORDER_SEND_EVALUATED;
+
+         return(true);
+
+      default:
+         PrintFormat(
+            "Unexpected synchronous submission status: %s",
+            EnumToString(
+               result.submission.status
+            )
+         );
+
+         result.status =
+            TRADE_EXECUTION_SUBMISSION_EVALUATION_FAILED;
+
+         return(false);
+   }
 }
 
 #endif
