@@ -7,26 +7,47 @@
 struct TradeExecutionSettings
 {
    double maxSpreadPoints;
+   int maxQuoteAgeSeconds;
 };
+
+bool ValidateSpreadGateSettings(
+   const TradeExecutionSettings &settings
+)
+{
+   if(
+      !MathIsValidNumber(settings.maxSpreadPoints) ||
+      settings.maxSpreadPoints <= 0.0
+   )
+   {
+      PrintFormat(
+         "Invalid MaxSpreadPoints: %G. Value must be finite and greater than zero.",
+         settings.maxSpreadPoints
+      );
+
+      return(false);
+   }
+
+   return(true);
+}
 
 bool ValidateTradeExecutionSettings(
    const TradeExecutionSettings &settings
 )
 {
-   if(
-      MathIsValidNumber(settings.maxSpreadPoints) &&
-      settings.maxSpreadPoints > 0.0
-   )
+   if(!ValidateSpreadGateSettings(settings))
+      return(false);
+
+   if(settings.maxQuoteAgeSeconds <= 0)
    {
-      return(true);
+      PrintFormat(
+         "Invalid MaxQuoteAgeSeconds: %d. Value must be greater than zero.",
+         settings.maxQuoteAgeSeconds
+      );
+
+      return(false);
    }
 
-   PrintFormat(
-      "Invalid MaxSpreadPoints: %G. Value must be finite and greater than zero.",
-      settings.maxSpreadPoints
-   );
-
-   return(false);
+   return(true);
 }
 
 struct PreTradeMarketSnapshot
@@ -160,6 +181,81 @@ bool LoadPreTradeMarketSnapshot(
    return(true);
 }
 
+enum QuoteFreshnessStatus
+{
+   QUOTE_FRESHNESS_NOT_EVALUATED,
+   QUOTE_FRESHNESS_ALLOWED,
+   QUOTE_FRESHNESS_STALE,
+   QUOTE_FRESHNESS_FUTURE_TIMESTAMP,
+   QUOTE_FRESHNESS_INVALID_INPUT
+};
+
+struct QuoteFreshnessResult
+{
+   bool allowed;
+   QuoteFreshnessStatus status;
+   long observedAgeSeconds;
+   int maxAgeSeconds;
+};
+
+void ResetQuoteFreshnessResult(
+   QuoteFreshnessResult &result
+)
+{
+   result.allowed = false;
+   result.status = QUOTE_FRESHNESS_NOT_EVALUATED;
+   result.observedAgeSeconds = 0;
+   result.maxAgeSeconds = 0;
+}
+
+// Pure decision: use whole server seconds on both sides because
+// TimeTradeServer() provides seconds and tick.time_msc provides ms.
+// A quote in the same second is not incorrectly classified as future.
+bool EvaluateQuoteFreshness(
+   const PreTradeMarketSnapshot &snapshot,
+   const datetime observedBrokerTime,
+   const int maxQuoteAgeSeconds,
+   QuoteFreshnessResult &result
+)
+{
+   ResetQuoteFreshnessResult(result);
+
+   if(
+      StringLen(snapshot.symbol) == 0 ||
+      snapshot.timeMsc <= 0 ||
+      observedBrokerTime <= 0 ||
+      maxQuoteAgeSeconds <= 0
+   )
+   {
+      result.status = QUOTE_FRESHNESS_INVALID_INPUT;
+      return(false);
+   }
+
+   const long tickSeconds = snapshot.timeMsc / 1000;
+   const long ageSeconds =
+      (long)observedBrokerTime - tickSeconds;
+
+   result.observedAgeSeconds = ageSeconds;
+   result.maxAgeSeconds = maxQuoteAgeSeconds;
+
+   if(ageSeconds < 0)
+   {
+      result.status = QUOTE_FRESHNESS_FUTURE_TIMESTAMP;
+      return(true);
+   }
+
+   if(ageSeconds > (long)maxQuoteAgeSeconds)
+   {
+      result.status = QUOTE_FRESHNESS_STALE;
+      return(true);
+   }
+
+   result.allowed = true;
+   result.status = QUOTE_FRESHNESS_ALLOWED;
+
+   return(true);
+}
+
 bool EvaluateSpreadGate(
    const TradeExecutionSettings &settings,
    const PreTradeMarketSnapshot &snapshot,
@@ -168,7 +264,7 @@ bool EvaluateSpreadGate(
 {
    ResetSpreadGateResult(result);
 
-   if(!ValidateTradeExecutionSettings(settings))
+   if(!ValidateSpreadGateSettings(settings))
    {
       result.status = SPREAD_GATE_INVALID_INPUT;
       return(false);
@@ -2670,6 +2766,19 @@ void ResetTradeRequestCheckResult(
    );
 }
 
+// OrderCheck uses retcode 0 for a successful pre-flight.
+// This is distinct from the OrderSend success retcodes.
+bool IsOrderCheckApproved(
+   const bool checkReturnedTrue,
+   const uint checkRetcode
+)
+{
+   return(
+      checkReturnedTrue &&
+      checkRetcode == 0
+   );
+}
+
 bool EvaluateTradeRequestCheck(
    const MarketTradeRequestBuildResult &requestBuild,
    TradeRequestCheckResult &result
@@ -2714,7 +2823,10 @@ bool EvaluateTradeRequestCheck(
    result.checkResult =
       checkResult;
 
-   if(!checkPassed)
+   if(!IsOrderCheckApproved(
+      checkPassed,
+      checkResult.retcode
+   ))
    {
       result.allowed = false;
       result.status =
@@ -3215,7 +3327,10 @@ bool ExecuteSynchronousMarketSubmission(
    result.requestCheckResult.checkResult =
       nativeCheckResult;
 
-   if(!checkPassed)
+   if(!IsOrderCheckApproved(
+      checkPassed,
+      nativeCheckResult.retcode
+   ))
    {
       result.requestCheckResult.allowed = false;
       result.requestCheckResult.status =
@@ -3272,6 +3387,8 @@ enum TradeExecutionStatus
    TRADE_EXECUTION_INVALID_INPUT,
    TRADE_EXECUTION_SETTINGS_INVALID,
    TRADE_EXECUTION_MARKET_SNAPSHOT_FAILED,
+   TRADE_EXECUTION_QUOTE_FRESHNESS_EVALUATION_FAILED,
+   TRADE_EXECUTION_QUOTE_FRESHNESS_BLOCKED,
    TRADE_EXECUTION_SPREAD_EVALUATION_FAILED,
    TRADE_EXECUTION_SPREAD_BLOCKED,
    TRADE_EXECUTION_TRADE_MODE_LOAD_FAILED,
@@ -3298,6 +3415,8 @@ struct TradeExecutionResult
    TradeExecutionStatus status;
 
    PreTradeMarketSnapshot marketSnapshot;
+   datetime freshnessObservedBrokerTime;
+   QuoteFreshnessResult quoteFreshness;
    SpreadGateResult spreadGate;
 
    ENUM_SYMBOL_TRADE_MODE tradeMode;
@@ -3329,6 +3448,11 @@ void ResetTradeExecutionResult(
 
    ResetPreTradeMarketSnapshot(
       result.marketSnapshot
+   );
+
+   result.freshnessObservedBrokerTime = 0;
+   ResetQuoteFreshnessResult(
+      result.quoteFreshness
    );
 
    ResetSpreadGateResult(
@@ -3428,6 +3552,39 @@ bool ExecuteApprovedTradeIntent(
          TRADE_EXECUTION_MARKET_SNAPSHOT_FAILED;
 
       return(false);
+   }
+
+   // TimeTradeServer() is the terminal's estimated broker time.
+   // Unlike TimeCurrent(), it can advance without new quotes.
+   result.freshnessObservedBrokerTime = TimeTradeServer();
+
+   if(!EvaluateQuoteFreshness(
+      result.marketSnapshot,
+      result.freshnessObservedBrokerTime,
+      executionSettings.maxQuoteAgeSeconds,
+      result.quoteFreshness
+   ))
+   {
+      result.status =
+         TRADE_EXECUTION_QUOTE_FRESHNESS_EVALUATION_FAILED;
+
+      return(false);
+   }
+
+   if(!result.quoteFreshness.allowed)
+   {
+      PrintFormat(
+         "Quote freshness blocked entry | symbol=%s | status=%s | quote_age_seconds=%I64d | max_age_seconds=%d",
+         symbol,
+         EnumToString(result.quoteFreshness.status),
+         result.quoteFreshness.observedAgeSeconds,
+         result.quoteFreshness.maxAgeSeconds
+      );
+
+      result.status =
+         TRADE_EXECUTION_QUOTE_FRESHNESS_BLOCKED;
+
+      return(true);
    }
 
    if(!EvaluateSpreadGate(
