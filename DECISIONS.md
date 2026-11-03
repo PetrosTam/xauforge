@@ -165,7 +165,7 @@ Infrastructure should solve an actual engineering problem rather than increase t
 
 ## ADR-006 — MIT License
 
-**Status:** Accepted
+**Status:** Superseded by ADR-020 (prospective policy only)
 
 ### Context
 
@@ -833,3 +833,35 @@ A neutral release-readiness label remains valid for technical, educational, coll
 - Public documentation describes XAUForge as an engineering project and work in progress.
 - The Public Release Gate remains a formal quality gate and is not implied by repository visibility.
 - This wording decision does not alter strategy, risk, execution, testing, licensing, or Git workflow decisions.
+
+---
+
+## ADR-020 — Prospective Proprietary Licensing for XAUForge
+
+**Status:** Accepted
+
+### Context
+
+ADR-006 established MIT licensing for XAUForge-owned source and the public repository subsequently exposed that license under ADR-016. The owner explicitly chose to use proprietary licensing for subsequent XAUForge revisions, consistent in presentation with the separate Litervia and UniSaver Legacy repositories.
+
+A new license notice cannot withdraw rights validly granted under MIT for earlier revisions or copies. Public GitHub visibility continues to permit viewing and forking subject to the GitHub Terms of Service. Ownership and third-party licensing must remain independently verified.
+
+### Decision
+
+Prospective XAUForge-owned revisions distributed after the licensing transition use the repository's XAUForge-specific proprietary `LICENSE` notice, only to the extent the owner holds the relevant rights. No new general open-source grant is intended for material under those terms.
+
+This decision supersedes ADR-006 for future licensing policy. The earlier MIT notice, historical grants, and applicable attribution requirements remain valid for previously MIT-licensed revisions and copies. The visibility policy of ADR-016 and the existing release-quality gates remain unchanged.
+
+### Rationale
+
+The owner prefers proprietary terms while retaining public source visibility for portfolio review. An explicit prospective transition and preserved license history avoid falsely implying that previously granted MIT rights can be revoked or that third-party rights have been transferred.
+
+### Consequences
+
+- The current root `LICENSE`, short `README.md` notice, and focused `docs/licensing.md` must agree.
+- Earlier MIT-licensed revisions remain available in Git history, and valid prior MIT permissions are not retroactively cancelled.
+- Third-party contributions, dependencies, broker data and assets remain subject to their own rights; any unresolved ownership question blocks claims of exclusive licensing over that material.
+- Public GitHub access does not make the new prospective terms open source, nor does it remove GitHub's platform-level viewing/forking permissions.
+- License review, source provenance, reproducibility, security, and the Public Release Gate remain required.
+- This change does not alter the strategy, risk model, Phase 7 implementation, or the XAUForge Git merge policy.
+- Issue #18 tracks the separately reviewable implementation and release evidence.

@@ -300,6 +300,6 @@ Testing should be performed in controlled and demo environments before any consi
 
 ## License
 
-XAUForge-owned source code is licensed under the [`MIT License`](LICENSE) ([OSI reference](https://opensource.org/license/mit)).
+Current XAUForge-owned materials are proprietary under the [LICENSE](LICENSE).
 
 Third-party code, data, broker data, and external assets retain their own licensing terms where applicable.
