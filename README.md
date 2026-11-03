@@ -1,305 +1,51 @@
 # XAUForge
 
-XAUForge is a production-style [MetaTrader 5](https://www.metatrader5.com/en/terminal/help) / [MQL5](https://www.mql5.com/en/docs) engineering project for Gold / XAUUSD focused on strategy isolation, broker-aware risk management, safe failure, execution correctness, and reproducible development.
+**MetaTrader 5 / MQL5 · Gold (XAUUSD) · Software engineering portfolio project**
 
-It is built as a software-engineering project. It is **not** presented as a guaranteed-profitable trading bot, and historical or simulated results must not be interpreted as evidence of future returns.
+XAUForge is a modular MetaTrader 5 Expert Advisor engineering project focused on deterministic signals, broker-aware risk management, safe trade execution and reproducible validation.
 
-## Current Status
+## Project Status
 
-**Phase 6 — Risk Manager: Complete**
+**In development — Phase 7 (Trade Manager validation).** Phases 0–6 are complete. The Trade Manager component has been tested independently, but the main `XAUForge.mq5` EA does not yet invoke trade submission. This repository is not a production-ready trading system.
 
-Phases 0 through 6 are complete.
+## Implemented Components
 
-**Next implementation milestone: Phase 7 — Trade Manager.** Phase 7 has not started, and XAUForge does not yet submit broker orders.
+- **StrategyEngine:** H1 EMA20/EMA50 crossover using completed bars (shifts 2 → 1), with ATR14-based baseline stop planning.
+- **SymbolManager:** runtime `_Symbol` capabilities and netting/hedging account-mode detection.
+- **RiskManager:** equity-based planned risk, conservative broker-volume sizing and a restart-safe, cash-flow-adjusted daily-loss entry gate.
+- **TradeManager (under validation):** current-quote and broker pre-flight checks, final stop/volume recalculation, `OrderCheck()` and synchronous request-result handling.
 
-Repository visibility is separate from release readiness. XAUForge is not production-ready, validated for real-money trading, or through the formal Public Release Gate.
+## Technology Stack
 
-Current implemented work includes:
+- **Platform:** MetaTrader 5 and MetaEditor
+- **Language:** MQL5
+- **Development:** Windows PowerShell, Git and GitHub
 
-- explicit `SignalTimeframe` with default `PERIOD_H1`,
-- completed-bar EMA20 / EMA50 crossover logic using shift `2 -> 1`,
-- ATR14-based baseline stop-distance planning,
-- broker symbol capability discovery through `_Symbol`,
-- netting / hedging account-mode detection,
-- validated risk settings,
-- planned percentage-equity risk sizing,
-- [`OrderCalcProfit()`](https://www.mql5.com/en/docs/trading/ordercalcprofit)-based position sizing in account currency,
-- conservative broker-volume normalization,
-- restart-safe broker-server-day daily-loss persistence,
-- cash-flow-adjusted daily-loss evaluation,
-- and a fail-safe new-entry daily-loss gate.
+## Getting Started
 
-See [`ROADMAP.md`](ROADMAP.md) for the development sequence, [`DECISIONS.md`](DECISIONS.md) for engineering decisions, [`docs/development-environment.md`](docs/development-environment.md) for the verified MT5 workflow, and [`docs/risk-management.md`](docs/risk-management.md) for the implemented Phase 6 risk model.
-
-## Strategy Baseline
-
-The initial strategy is deliberately small and explicit:
-
-| Parameter | Baseline |
-| --- | --- |
-| Market | Gold / XAUUSD domain |
-| Runtime symbol | Attached broker symbol via `_Symbol` |
-| Signal timeframe | `PERIOD_H1` |
-| Fast EMA | 20 |
-| Slow EMA | 50 |
-| Signal rule | Completed-bar crossover, shift `2 -> 1` |
-| ATR period | 14 |
-| Baseline stop distance | ATR14 × 2.0 |
-| Risk / reward | `2.0` |
-
-Bar `0` is never used for signal generation.
-
-The current crossover semantics are explicit:
-
-```text
-BUY:
-EMA20[2] <= EMA50[2]
-AND
-EMA20[1] > EMA50[1]
-
-SELL:
-EMA20[2] >= EMA50[2]
-AND
-EMA20[1] < EMA50[1]
-```
-
-Equality on shift `1` does not produce a signal.
-
-## Architecture
-
-XAUForge separates signal generation, risk calculation, and future broker execution responsibilities.
-
-```text
-Market / Broker
-      |
-      v
-StrategyEngine
-  signal intent only
-      |
-      v
-RiskManager
-  SL/TP planning
-  planned risk
-  volume sizing
-  daily-loss gate
-      |
-      v
-TradeManager
-  Phase 7 — not implemented yet
-```
-
-[`StrategyEngine`](mql5/Include/XAUForge/StrategyEngine.mqh) does not place trades.
-
-[`RiskManager`](mql5/Include/XAUForge/RiskManager.mqh) calculates and validates the risk plan.
-
-Dynamic broker pre-flight, final broker stop-constraint handling, independent margin/request validation, [`OrderCheck`](https://www.mql5.com/en/docs/trading/ordercheck), synchronous request submission, and immediate retcode handling belong to [Phase 7](ROADMAP.md#phase-7--trade-manager).
-
-## Risk Management
-
-### Planned risk
-
-The baseline per-trade risk is percentage-based rather than a fixed lot size.
-
-```text
-planned_risk_amount = equity * (risk_percent / 100)
-```
-
-Default:
-
-```text
-RiskPercent = 1.0
-```
-
-This is planned price risk, not a guarantee of realized maximum loss.
-
-### Position sizing
-
-XAUForge does not hard-code a gold pip-value assumption.
-
-[`OrderCalcProfit()`](https://www.mql5.com/en/docs/trading/ordercalcprofit) is used to estimate the account-currency loss of a reference volume between the candidate entry and stop price.
-
-```text
-loss_for_reference_volume =
-    abs(OrderCalcProfit(... entry -> stop ...))
-
-raw_volume =
-    planned_risk_amount
-    / loss_for_reference_volume
-    * reference_volume
-```
-
-If Phase 7 broker pre-flight changes the final entry-to-stop distance, sizing must be recalculated before [`OrderCheck`](https://www.mql5.com/en/docs/trading/ordercheck).
-
-### Conservative broker-volume normalization
-
-The theoretical volume is normalized using:
-
-- `SYMBOL_VOLUME_MIN`
-- `SYMBOL_VOLUME_MAX`
-- `SYMBOL_VOLUME_STEP`
-
-Normalization is conservative and rounds downward.
-
-If raw volume exceeds `SYMBOL_VOLUME_MAX`, it is capped downward before step normalization.
-
-If the normalized volume falls below `SYMBOL_VOLUME_MIN`, the candidate entry is rejected instead of being increased to the broker minimum.
-
-### Daily-loss gate
-
-Default:
-
-```text
-MaxDailyLossPercent = 3.0
-```
-
-The daily-loss boundary uses the broker-server calendar day.
-
-The baseline is restart-safe and cash-flow-adjusted so qualifying non-trading account funding operations do not masquerade as trading P/L.
-
-The implemented qualifying cash-flow allowlist is:
-
-- `DEAL_TYPE_BALANCE`
-- `DEAL_TYPE_CREDIT`
-- `DEAL_TYPE_BONUS`
-
-Reaching the daily-loss threshold blocks new entries. It does not force-liquidate an existing position.
-
-## Validation Evidence
-
-Phase 6 exit evidence includes:
-
-- production MQL5 compile gate: **0 errors, 0 warnings**,
-- deterministic daily-loss / entry-gate validation: **15 / 15 passed**,
-- deterministic broker-volume normalization validation: **6 / 6 passed**,
-- Phase 6 risk-plan / sizing exit validation: **15 / 15 passed**,
-- persistence / new-day / fail-safe exit validation: **9 / 9 passed**,
-- controlled portable-MT5 same-day recovery:
-  - first attach -> `DAILY_LOSS_STATE_RESOLUTION_INITIALIZED`,
-  - same-day re-attach -> `DAILY_LOSS_STATE_RESOLUTION_RECOVERED`,
-  - original day-start equity remained unchanged,
-- full Phase 6 branch diff review before merge,
-- deliberate staging and atomic [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/),
-- and merged [PR #14](https://github.com/PetrosTam/xauforge/pull/14) evidence for the completed milestone.
-
-The temporary deterministic validation scripts are currently kept outside the repository. Formal repository test infrastructure is introduced later in the roadmap.
-
-## Development Environment
-
-The Git repository is the source of truth.
-
-Development uses a dedicated [MetaTrader 5](https://www.metatrader5.com/en/terminal/help) / [MetaEditor](https://www.metatrader5.com/en/metaeditor/help) installation in `/portable` mode outside the repository.
-
-Repository source is linked into that isolated terminal environment rather than copying terminal runtime state into Git.
-
-The main EA source is [`mql5/Experts/XAUForge/XAUForge.mq5`](mql5/Experts/XAUForge/XAUForge.mq5), with the MetaEditor project definition in [`XAUForge.mqproj`](mql5/Experts/XAUForge/XAUForge.mqproj).
-
-A verified [`scripts/build-mql5.ps1`](scripts/build-mql5.ps1) PowerShell build wrapper compiles the project and parses the MetaEditor compilation log.
-
-Example:
+Requires Windows, Git and a dedicated MetaTrader 5/MetaEditor installation in `/portable` mode **outside** the repository. Follow the [development environment guide](docs/development-environment.md) before building; it describes the required source links and verified setup.
 
 ```powershell
+git clone https://github.com/PetrosTam/xauforge.git
+Set-Location xauforge
 .\scripts\build-mql5.ps1 -Mt5Root "<path-to-dedicated-mt5>"
 ```
 
-Compile gate:
+Replace the sample MT5 location with your own dedicated installation path. A successful build requires **0 errors and 0 unexplained warnings**.
 
-```text
-0 errors
-0 unexplained warnings
-```
+## Validation
 
-Terminal configuration, account state, history, cache, logs, credentials, and generated `.ex5` files are not normal source-controlled artifacts.
+Phase 7 has undergone focused MQL5 regressions and controlled Strategy Tester execution. Those results validate specific components and failure paths; they do **not** establish complete production EA integration, live-trading readiness or future profitability. See [Phase 7 validation evidence](docs/phase-7-validation.md).
 
-## Engineering Principles
+## Documentation
 
-XAUForge follows a small set of explicit engineering rules:
+- [Strategy baseline](docs/strategy-baseline.md)
+- [Risk management](docs/risk-management.md)
+- [Trade Manager and execution boundaries](docs/trade-manager.md)
+- [Development environment](docs/development-environment.md)
+- [Phase 7 validation evidence](docs/phase-7-validation.md)
+- [Roadmap](ROADMAP.md) and [engineering decisions](DECISIONS.md)
 
-- correctness before sophistication,
-- understanding before technology count,
-- safe failure over forced action,
-- reproducibility as a first-class requirement,
-- evidence over claims,
-- no unnecessary architecture or infrastructure.
+## License and Disclaimer
 
-Significant design decisions are recorded in [`DECISIONS.md`](DECISIONS.md).
-
-## Current Limitations
-
-The following are intentionally **not** claimed as implemented yet:
-
-- dynamic pre-trade spread gating,
-- final trade/session availability validation,
-- final broker stop / freeze-constraint enforcement,
-- SL adjustment and risk recalculation after final broker pre-flight,
-- independent margin validation,
-- [`OrderCheck`](https://www.mql5.com/en/docs/trading/ordercheck),
-- [`MqlTradeRequest`](https://www.mql5.com/en/docs/constants/structures/mqltraderequest) construction,
-- synchronous broker order submission,
-- immediate trade retcode handling,
-- full order / deal / position lifecycle ownership,
-- maximum-one-position enforcement,
-- [`OnTradeTransaction`](https://www.mql5.com/en/docs/event_handlers/ontradetransaction) lifecycle tracking,
-- restart reconstruction of active trading positions,
-- formal Strategy Tester integration suite,
-- manifested backtest experiments,
-- historical out-of-sample and demo forward validation,
-- Python analytics,
-- API / database integration,
-- RabbitMQ,
-- CI / audit / hardening phase completion,
-- formal Public Release Gate completion.
-
-These are implemented only when their roadmap phases are reached.
-
-## Repository Workflow
-
-Development uses:
-
-- `main` as the permanent branch,
-- short-lived feature branches,
-- atomic [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/),
-- deliberate staging and diff review,
-- pull requests for meaningful changes,
-- rebase-and-merge when the commit history is already clean and atomic,
-- branch cleanup after merge.
-
-Repository visibility is managed through GitHub settings rather than project automation.
-
-## Roadmap
-
-The core roadmap progresses through:
-
-```text
-StrategyEngine
--> Symbol / Account Capabilities
--> RiskManager
--> TradeManager
--> Trade Lifecycle
--> Transaction Tracking
--> Position Recovery
--> Testing
--> Backtesting
--> Historical + Demo Forward Validation
--> Python Analytics
--> Conditional Backend / Queue Work
--> CI / Audit / Hardening
--> Release Readiness
-```
-
-See [`ROADMAP.md`](ROADMAP.md) for the full phased plan.
-
-## Disclaimer
-
-XAUForge is educational engineering software.
-
-It is not investment advice and does not guarantee profitability.
-
-Planned price risk is not the same as guaranteed realized maximum loss. Slippage, gaps, commissions, swap, fees, execution delays, and broker behavior can cause realized results to differ from the planned risk calculation.
-
-Testing should be performed in controlled and demo environments before any consideration of real-money use.
-
-## License
-
-Current XAUForge-owned materials are proprietary under the [LICENSE](LICENSE).
-
-Third-party code, data, broker data, and external assets retain their own licensing terms where applicable.
+Current XAUForge-owned materials are proprietary under the [LICENSE](LICENSE). XAUForge is an engineering project, **not financial advice or a guaranteed-profitable trading bot**. Realized losses may exceed planned price risk due to slippage, gaps, fees or execution conditions. Do not use this work for live trading without appropriate independent verification.
