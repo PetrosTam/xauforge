@@ -241,4 +241,4 @@ The next implementation milestone is **Phase 7 — Trade Manager**.
 
 Phase 7 has not started. Dynamic pre-trade validation, broker stop-constraint enforcement, risk recalculation after any final SL adjustment, independent margin/request validation, `OrderCheck`, synchronous request submission, and immediate retcode handling remain Phase 7 work.
 
-The repository is public during active development under the decision recorded in [`DECISIONS.md`](DECISIONS.md); that visibility does not mean the formal Public Release Gate or Phase 18 has been completed.
+Repository visibility is separate from project completion; [ADR-016](DECISIONS.md#adr-016--repository-visibility-is-public-during-active-development) records the earlier visibility decision. The formal Public Release Gate and Phase 18 remain incomplete.
