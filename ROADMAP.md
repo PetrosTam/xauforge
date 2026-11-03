@@ -101,7 +101,7 @@ Exit evidence:
 
 ## Phase 7 — Trade Manager
 
-**Status:** Next — Not Started
+**Status:** In Progress — final validation ([Issue #17](https://github.com/PetrosTam/xauforge/issues/17)); not yet merged
 
 Exit evidence:
 
@@ -237,8 +237,6 @@ Exit evidence:
 
 Phases 0 through 6 are complete.
 
-The next implementation milestone is **Phase 7 — Trade Manager**.
-
-Phase 7 has not started. Dynamic pre-trade validation, broker stop-constraint enforcement, risk recalculation after any final SL adjustment, independent margin/request validation, `OrderCheck`, synchronous request submission, and immediate retcode handling remain Phase 7 work.
+Phase 7 — Trade Manager is under final validation on the local feature branch, tracked by [Issue #17](https://github.com/PetrosTam/xauforge/issues/17). The component has focused test evidence, but the production `XAUForge.mq5` does not yet invoke trade submission. Phase 7 is not marked complete; acceptance and final branch review remain open.
 
 Repository visibility is separate from project completion; [ADR-016](DECISIONS.md#adr-016--repository-visibility-is-public-during-active-development) records the earlier visibility decision. The formal Public Release Gate and Phase 18 remain incomplete.

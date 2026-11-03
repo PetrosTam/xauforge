@@ -426,4 +426,4 @@ Phase 6 exit evidence includes:
 - deliberate staging and atomic Git commits,
 - and ADRs for significant risk, persistence, cash-flow, and repository decisions.
 
-Phase 6 is **Complete**. Phase 7 — Trade Manager is the next implementation milestone and has not started.
+Phase 6 is **Complete**. Phase 7 Trade Manager is under final validation; see [`trade-manager.md`](trade-manager.md) and [`phase-7-validation.md`](phase-7-validation.md). This document remains the Phase 6 risk-management record.
