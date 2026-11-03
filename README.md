@@ -12,7 +12,7 @@ Phases 0 through 6 are complete.
 
 **Next implementation milestone: Phase 7 — Trade Manager.** Phase 7 has not started, and XAUForge does not yet submit broker orders.
 
-The repository is currently public as a work in progress by manual owner decision. Public visibility does **not** mean that XAUForge is production-ready, validated for real-money use, profitable, or through the formal Public Release Gate.
+Repository visibility is separate from release readiness. XAUForge is not production-ready, validated for real-money trading, or through the formal Public Release Gate.
 
 Current implemented work includes:
 
@@ -263,7 +263,7 @@ Development uses:
 - rebase-and-merge when the commit history is already clean and atomic,
 - branch cleanup after merge.
 
-Repository visibility changes remain manual owner actions.
+Repository visibility is managed through GitHub settings rather than project automation.
 
 ## Roadmap
 
