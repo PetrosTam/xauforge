@@ -138,6 +138,34 @@ The original five tests were already included in the
 historical 118/118 focused results. The eight additional
 cases are new and are reported separately here.
 
+## Repository-Controlled Market Snapshot Loader Regression
+
+**Observed:** 2026-11-04 at 04:51:21 local time.
+
+**Source:** `mql5/Scripts/Tests/TradeManagerMarketSnapshotValidation.mq5`
+
+**Initial source SHA-256:** `EC4D4EC212F236FFC338F4E6D730975CCEBBE06D2D81931EB2856694BA87C716`
+
+The source compiled using the dedicated MetaEditor installation
+with 0 errors and 0 warnings.
+
+**Observed result:**
+
+`MARKET_SNAPSHOT_TEST_RESULT | passed=2 | failed=0 | total=2`
+
+Both tests passed: empty-symbol rejection and unavailable-symbol
+tick-lookup failure. Both verified that the output snapshot was
+reset after failure, preventing reuse of previously seeded values.
+
+The unavailable-symbol test checked `SymbolExist()` before
+calling the loader. `SymbolInfoTick()` failed with error 4302
+(`ERR_MARKET_NOT_SELECTED`) in the observed terminal run.
+
+The test does not submit orders or modify broker symbol selection.
+It does not simulate malformed tick data returned by a
+successful `SymbolInfoTick()` call, or prove the complete
+execution-orchestration no-submit path.
+
 ## Open Evidence Before Phase 7 Exit
 
 - Reconcile the 21 acceptance criteria and 16 validation requirements of [Issue #17](https://github.com/PetrosTam/xauforge/issues/17) against the final branch source and reproducible evidence.
