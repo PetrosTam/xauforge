@@ -6,7 +6,7 @@ Its purpose is to make important architectural, trading, risk, workflow, and inf
 
 Significant changes to these decisions must be recorded here with their context, decision, rationale, and consequences rather than introduced silently.
 
-Superseded decisions remain in this log. When a later ADR replaces an earlier decision, the earlier decision text is retained and its status points to the superseding ADR so the engineering history remains auditable.
+Superseded decisions remain indexed for traceability. This register states the current engineering policies, while Git history provides the revision record.
 
 ## Decision Record Format
 
@@ -132,7 +132,7 @@ Keeping the repository private during development allows the project to mature w
 - Documentation and limitations must be suitable for public viewing before release.
 - The owner manually changes repository visibility.
 
-This visibility-timing decision was later replaced by ADR-016 after the repository owner made the repository public during active development. The security, documentation, licensing, and manual-owner-control principles remain applicable.
+This visibility-timing decision was later replaced by ADR-016 after the repository became public during active development. The security, documentation, licensing, and manual-owner-control principles remain applicable.
 
 ---
 
@@ -163,33 +163,27 @@ Infrastructure should solve an actual engineering problem rather than increase t
 
 ---
 
-## ADR-006 — MIT License
+## ADR-006 — Licensing Governance
 
-**Status:** Superseded by ADR-020 (prospective policy only)
+**Status:** Superseded by ADR-020
 
 ### Context
 
-XAUForge-owned source code requires a clear licensing baseline.
-
-Third-party software, data, and assets may have their own independent licensing requirements.
+XAUForge requires a clear, consistent licensing policy across repository documentation.
 
 ### Decision
 
-XAUForge-owned source code is licensed under the MIT License with SPDX identifier `MIT`.
-
-Third-party licenses remain independent.
+ADR-020 and the root `LICENSE` define the applicable licensing policy for XAUForge-owned materials.
 
 ### Rationale
 
-The MIT License provides a clear and established licensing model for project-owned source without incorrectly applying the same terms to external components.
+Maintaining one authoritative licensing policy prevents ambiguity between project records.
 
 ### Consequences
 
-- The repository contains the standard MIT License text.
-- XAUForge-owned source follows the MIT licensing baseline.
-- Third-party dependencies, data, and assets require separate license review.
+- `README.md` must remain consistent with ADR-020 and the root `LICENSE`.
+- Third-party licenses and rights remain independent.
 - Licensing remains part of the formal Public Release Gate.
-- Public repository visibility under ADR-016 does not imply that the formal release-quality licensing review has been completed or waived.
 
 ---
 
@@ -679,7 +673,7 @@ Preserving the formal Public Release Gate as a quality gate keeps the original s
 - Secrets, broker credentials, account configuration, `.env` values, terminal runtime state, private notes, logs, and generated `.ex5` binaries remain prohibited from normal Git history.
 - Because pushed commits and feature branches can become publicly visible immediately, secret/history hygiene is an ongoing requirement rather than a one-time publication task.
 - If sensitive credentials are ever exposed, credential rotation takes priority; deleting the current file alone is not sufficient if the value exists in Git history.
-- MIT licensing remains the baseline for XAUForge-owned source, while third-party licensing remains independent and subject to review.
+- XAUForge-owned materials follow the current proprietary licensing policy in ADR-020; third-party licensing remains independent.
 - The formal Public Release Gate remains required before XAUForge is described as release-ready or fully validated.
 - Repository visibility changes remain manual owner actions; no automation may make the repository public or private.
 
@@ -836,32 +830,30 @@ A neutral release-readiness label remains valid for technical, educational, coll
 
 ---
 
-## ADR-020 — Prospective Proprietary Licensing for XAUForge
+## ADR-020 — Proprietary Licensing for XAUForge
 
 **Status:** Accepted
 
 ### Context
 
-ADR-006 established MIT licensing for XAUForge-owned source. XAUForge adopts proprietary licensing for subsequent revisions, while preserving the rights granted under earlier MIT-licensed copies. ADR-016 records a separate historical decision on repository visibility.
-
-A new license notice cannot withdraw rights validly granted under MIT for earlier revisions or copies. Repository visibility and licensing are independent. When the repository is public, the GitHub Terms of Service continue to govern platform-level viewing and forking. Ownership and third-party licensing must remain independently verified.
+XAUForge requires a clear policy for project-owned source code and documentation. Repository visibility does not determine licensing terms, and third-party materials may carry independent rights and restrictions.
 
 ### Decision
 
-Prospective XAUForge-owned revisions distributed after the licensing transition use the repository's XAUForge-specific proprietary `LICENSE` notice, only to the extent the copyright holder holds the necessary rights. No new general open-source grant is intended for material under those terms.
+XAUForge-owned materials are distributed under the project-specific proprietary notice in the root `LICENSE`, to the extent that the necessary rights are held.
 
-This decision supersedes ADR-006 for future licensing policy. The earlier MIT notice, historical grants, and applicable attribution requirements remain valid for previously MIT-licensed revisions and copies. The visibility policy of ADR-016 and the existing release-quality gates remain unchanged.
+No general open-source license is granted for material covered by that notice. Third-party materials remain subject to their own terms.
 
 ### Rationale
 
-Proprietary terms provide a clear policy for new XAUForge-owned revisions, independently of repository visibility. Recording the transition and preserving license history avoids implying that prior MIT rights can be withdrawn or that third-party rights have been transferred.
+A dedicated proprietary notice defines the current conditions for use and distribution of XAUForge-owned materials while keeping licensing separate from public repository visibility.
+
+Keeping third-party rights separate avoids claiming permissions or ownership that XAUForge does not hold.
 
 ### Consequences
 
-- The current root `LICENSE`, short `README.md` notice, and focused `docs/licensing.md` must agree.
-- Earlier MIT-licensed revisions remain available in Git history, and valid prior MIT permissions are not retroactively cancelled.
-- Third-party contributions, dependencies, broker data and assets remain subject to their own rights; any unresolved ownership question blocks claims of exclusive licensing over that material.
-- GitHub repository visibility does not itself grant new open-source rights; the platform's applicable viewing and forking permissions remain separate.
-- License review, source provenance, reproducibility, security, and the Public Release Gate remain required.
-- This change does not alter the strategy, risk model, Phase 7 implementation, or the XAUForge Git merge policy.
-- Issue #18 tracks the separately reviewable implementation and release evidence.
+- The root `LICENSE` and `README.md` must describe the current proprietary policy consistently.
+- Third-party contributions, dependencies, broker data, and other assets remain subject to their own rights.
+- Public repository visibility does not itself grant a general right to reuse or redistribute proprietary XAUForge materials.
+- Licensing, source provenance, security, and reproducibility remain part of the formal Public Release Gate.
+- This decision does not alter the strategy, risk model, Phase 7 execution logic, or Git merge workflow.

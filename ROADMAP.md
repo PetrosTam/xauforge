@@ -23,7 +23,7 @@ Exit evidence:
 Exit evidence:
 
 - Repository created private for the original bootstrap; later visibility change is recorded in [`DECISIONS.md`](DECISIONS.md)
-- Repository bootstrap used MIT licensing, recorded in [ADR-006](DECISIONS.md#adr-006--mit-license); later proprietary policy is recorded in [ADR-020](DECISIONS.md#adr-020--prospective-proprietary-licensing-for-xauforge)
+- Current licensing policy documented in [LICENSE](LICENSE) and [ADR-020](DECISIONS.md#adr-020--proprietary-licensing-for-xauforge)
 - Repository foundation pull request
 - Dedicated [MetaTrader 5](https://www.metatrader5.com/en/terminal/help) and [MetaEditor](https://www.metatrader5.com/en/metaeditor/help) instance in `/portable` mode
 - Local [`XAUForge.mqproj`](mql5/Experts/XAUForge/XAUForge.mqproj)
@@ -230,7 +230,7 @@ Exit evidence:
 - Representative reproducible evidence
 - Screenshots / narrative / limitations prepared where useful
 - Secret and history audit complete
-- Current license, historical MIT grants, copyright ownership, and third-party rights reviewed
+- Current license, source ownership, and third-party rights reviewed
 - Disclaimers and performance claims remain honest
 
 ## Current Position
