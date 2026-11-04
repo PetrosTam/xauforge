@@ -572,7 +572,78 @@ void OnTick()
    );
 
    // ---------------------------------------------------------------
-   // Case 4:
+   // Case 4: A structurally invalid approved plan must fail closed.
+   // ---------------------------------------------------------------
+   RiskTradePlan invalidRiskPlan = riskPlan;
+   invalidRiskPlan.stopDistance = 0.0;
+
+   TradeExecutionResult invalidRiskPlanResult;
+
+   const bool invalidRiskPlanEvaluation =
+      ExecuteApprovedTradeIntent(
+         _Symbol,
+         invalidRiskPlan,
+         VALIDATION_RISK_PERCENT,
+         VALIDATION_RISK_REWARD_RATIO,
+         volumeMin,
+         volumeMax,
+         volumeStep,
+         allowedSettings,
+         VALIDATION_MAGIC_NUMBER,
+         VALIDATION_DEVIATION_POINTS,
+         invalidRiskPlanResult
+      );
+
+   RecordTestResult(
+      "invalid_risk_plan_blocks_submission",
+      !invalidRiskPlanEvaluation &&
+      invalidRiskPlanResult.status ==
+         TRADE_EXECUTION_GEOMETRY_BUILD_FAILED &&
+      !invalidRiskPlanResult.submission.orderSendAttempted
+   );
+
+   LogExecutionResult(
+      "invalid_risk_plan",
+      invalidRiskPlanEvaluation,
+      invalidRiskPlanResult
+   );
+
+   // ---------------------------------------------------------------
+   // Case 5: A zero risk percentage must fail before submission.
+   // ---------------------------------------------------------------
+   TradeExecutionResult zeroRiskResult;
+
+   const bool zeroRiskEvaluation =
+      ExecuteApprovedTradeIntent(
+         _Symbol,
+         riskPlan,
+         0.0,
+         VALIDATION_RISK_REWARD_RATIO,
+         volumeMin,
+         volumeMax,
+         volumeStep,
+         allowedSettings,
+         VALIDATION_MAGIC_NUMBER,
+         VALIDATION_DEVIATION_POINTS,
+         zeroRiskResult
+      );
+
+   RecordTestResult(
+      "zero_risk_percent_blocks_submission",
+      !zeroRiskEvaluation &&
+      zeroRiskResult.status ==
+         TRADE_EXECUTION_FINAL_RISK_SIZING_FAILED &&
+      !zeroRiskResult.submission.orderSendAttempted
+   );
+
+   LogExecutionResult(
+      "zero_risk_percent",
+      zeroRiskEvaluation,
+      zeroRiskResult
+   );
+
+   // ---------------------------------------------------------------
+   // Case 6:
    // Optional controlled submission in the Strategy Tester only.
    // Never execute after a failed negative test or without opt-in.
    // ---------------------------------------------------------------

@@ -482,6 +482,50 @@ These eight cases reproduce the historical Submission
 Safety suite already included in the reported 118/118
 focused results. They are not counted again.
 
+## Expanded Orchestration Fail-Safe Regression
+
+**Observed:** 2026-11-04 19:22:30 local time, dedicated MT5
+Strategy Tester, MetaQuotes-Demo XAUUSD/H1, tester build 6296.
+
+**Source:**
+`mql5/Experts/XAUForge/Validation/TradeManagerOrchestrationValidation.mq5`
+
+The validation EA adds two negative cases to the existing
+three-case no-submission harness:
+
+- `invalid_risk_plan_blocks_submission`: a zero stop distance
+  causes `TRADE_EXECUTION_GEOMETRY_BUILD_FAILED` before submission.
+- `zero_risk_percent_blocks_submission`: zero planned percent risk
+  causes `TRADE_EXECUTION_FINAL_RISK_SIZING_FAILED` before submission.
+
+The modified validation source compiled in dedicated MetaEditor
+with **0 errors and 0 warnings**.
+
+**Strategy Tester configuration:** 2026-10-01 through 2026-10-02,
+Open prices only, USD 100,000 initial deposit, 1:100 leverage,
+optimization disabled, `ValidationMaxQuoteAgeSeconds=30`,
+`ValidationEnablePositiveSubmission=false`.
+
+**Observed result:**
+`ORCHESTRATION_TEST_RESULT | passed=5 | failed=0 | skipped=1 | total=6 | status=NEGATIVE_ONLY_PASS`
+
+**Completion:**
+`ORCHESTRATION_VALIDATION_COMPLETE | positive_case=SKIPPED_DISABLED | order_send_attempted=false | no_retry=true`
+
+The three existing negative cases and both added cases passed;
+the optional positive submission was intentionally skipped.
+No `OrderSend()` attempt was reported; final tester balance
+remained USD 100,000. The tester loaded the repository-linked
+`Experts\XAUForge\Validation\TradeManagerOrchestrationValidation.ex5`.
+
+**Scope limitation:** These results cover two additional invalid
+approved-intent inputs at the full `ExecuteApprovedTradeIntent()`
+boundary, not all possible broker or market failures. They do
+not demonstrate Phase 6 daily-loss gate integration with an
+active production submission path. The earlier orchestration
+runs remain separate historical observations, not added to
+this run's five passes.
+
 ## Open Evidence Before Phase 7 Exit
 
 - Reconcile the 21 acceptance criteria and 16 validation requirements of [Issue #17](https://github.com/PetrosTam/xauforge/issues/17) against the final branch source and reproducible evidence.
