@@ -643,7 +643,84 @@ void OnTick()
    );
 
    // ---------------------------------------------------------------
-   // Case 6:
+   // Case 6: Invalid direction must fail at the current trade-mode gate.
+   // ---------------------------------------------------------------
+   RiskTradePlan invalidDirectionPlan = riskPlan;
+   invalidDirectionPlan.direction = SIGNAL_NONE;
+
+   TradeExecutionResult invalidDirectionResult;
+
+   const bool invalidDirectionEvaluation =
+      ExecuteApprovedTradeIntent(
+         _Symbol,
+         invalidDirectionPlan,
+         VALIDATION_RISK_PERCENT,
+         VALIDATION_RISK_REWARD_RATIO,
+         volumeMin,
+         volumeMax,
+         volumeStep,
+         allowedSettings,
+         VALIDATION_MAGIC_NUMBER,
+         VALIDATION_DEVIATION_POINTS,
+         invalidDirectionResult
+      );
+
+   RecordTestResult(
+      "invalid_direction_blocks_submission",
+      !invalidDirectionEvaluation &&
+      invalidDirectionResult.status ==
+         TRADE_EXECUTION_TRADE_MODE_EVALUATION_FAILED &&
+      invalidDirectionResult.tradeModeGate.status ==
+         TRADE_MODE_GATE_INVALID_INPUT &&
+      !invalidDirectionResult.submission.orderSendAttempted
+   );
+
+   LogExecutionResult(
+      "invalid_direction",
+      invalidDirectionEvaluation,
+      invalidDirectionResult
+   );
+
+   // ---------------------------------------------------------------
+   // Case 7: Tiny positive risk must not be rounded up to broker min.
+   // Fixed XAUUSD tester fixture: 100,000 USD equity, 5 USD baseline SL.
+   // ---------------------------------------------------------------
+   const double belowMinimumRiskPercent = 1.0e-9;
+   TradeExecutionResult belowMinimumRiskResult;
+
+   const bool belowMinimumRiskEvaluation =
+      ExecuteApprovedTradeIntent(
+         _Symbol,
+         riskPlan,
+         belowMinimumRiskPercent,
+         VALIDATION_RISK_REWARD_RATIO,
+         volumeMin,
+         volumeMax,
+         volumeStep,
+         allowedSettings,
+         VALIDATION_MAGIC_NUMBER,
+         VALIDATION_DEVIATION_POINTS,
+         belowMinimumRiskResult
+      );
+
+   RecordTestResult(
+      "below_minimum_volume_blocks_submission",
+      !belowMinimumRiskEvaluation &&
+      belowMinimumRiskResult.status ==
+         TRADE_EXECUTION_FINAL_RISK_SIZING_FAILED &&
+      belowMinimumRiskResult.riskSizing.status ==
+         FINAL_RISK_SIZING_NORMALIZATION_FAILED &&
+      !belowMinimumRiskResult.submission.orderSendAttempted
+   );
+
+   LogExecutionResult(
+      "below_minimum_volume",
+      belowMinimumRiskEvaluation,
+      belowMinimumRiskResult
+   );
+
+   // ---------------------------------------------------------------
+   // Case 8:
    // Optional controlled submission in the Strategy Tester only.
    // Never execute after a failed negative test or without opt-in.
    // ---------------------------------------------------------------

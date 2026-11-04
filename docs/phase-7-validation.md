@@ -526,6 +526,51 @@ active production submission path. The earlier orchestration
 runs remain separate historical observations, not added to
 this run's five passes.
 
+## Extended Orchestration Preflight Fail-Safe Regression
+
+**Observed:** 2026-11-04 19:52:00 local time, dedicated MT5
+Strategy Tester, MetaQuotes-Demo XAUUSD/H1, tester agent build 6296.
+
+**Source:**
+`mql5/Experts/XAUForge/Validation/TradeManagerOrchestrationValidation.mq5`
+
+The existing five negative full-boundary cases remain in the
+harness; two more cases exercise `ExecuteApprovedTradeIntent()`:
+
+- `invalid_direction_blocks_submission`: a `SIGNAL_NONE` risk
+  plan is rejected by the trade-mode evaluation, before submission.
+- `below_minimum_volume_blocks_submission`: an extremely small
+  positive planned risk produces volume below broker minimum;
+  risk-volume normalization rejects the entry rather than
+  increasing the volume to `SYMBOL_VOLUME_MIN` (observed `0.01`).
+
+The updated validation source compiled using dedicated MetaEditor
+with **0 errors and 0 warnings**.
+
+**Strategy Tester configuration:** 2026-10-01 through 2026-10-02,
+Open prices only, USD 100,000 initial deposit, 1:100 leverage,
+optimization disabled, `ValidationMaxQuoteAgeSeconds=30`,
+`ValidationEnablePositiveSubmission=false`.
+
+**Observed result:**
+`ORCHESTRATION_TEST_RESULT | passed=7 | failed=0 | skipped=1 | total=8 | status=NEGATIVE_ONLY_PASS`
+
+**Completion:**
+`ORCHESTRATION_VALIDATION_COMPLETE | positive_case=SKIPPED_DISABLED | order_send_attempted=false | no_retry=true`
+
+The tester loaded the repository-linked
+`Experts\XAUForge\Validation\TradeManagerOrchestrationValidation.ex5`.
+All seven negative tests passed; the optional positive submission
+was intentionally skipped. No `OrderSend()` attempt was reported;
+final balance remained USD 100,000.
+
+**Scope limitation:** This is the latest cumulative run of the same
+orchestration harness, not seven additional tests on top of the
+previous 5 PASS / 0 FAIL / 1 SKIP run. It does not demonstrate
+all stale/unavailable market data, session, broker-rejection, or
+margin failure paths through the complete execution boundary.
+The comprehensive fail-safe acceptance criterion remains open.
+
 ## Open Evidence Before Phase 7 Exit
 
 - Reconcile the 21 acceptance criteria and 16 validation requirements of [Issue #17](https://github.com/PetrosTam/xauforge/issues/17) against the final branch source and reproducible evidence.
