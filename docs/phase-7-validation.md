@@ -2,9 +2,9 @@
 
 ## Status and Provenance
 
-Phase 7 is under final review. The results below were observed in the dedicated MetaTrader 5 / MetaEditor portable environment on **MetaTrader build 6235**, using the MetaQuotes-Demo XAUUSD symbol. Some scripts ran as one-shot chart scripts; others ran as controlled Strategy Tester validation EAs. They are focused engineering checks, **not** a complete production EA integration suite.
+Phase 7 is under final review. Earlier historical validation observations used MetaTrader build 6235; later repository-controlled Strategy Tester runs used build 6296. All took place within the dedicated MetaTrader 5 / MetaEditor portable environment, using MetaQuotes-Demo XAUUSD. Some checks were one-shot chart scripts and others were Strategy Tester validation EAs. These are focused engineering checks, **not** a complete production EA integration suite.
 
-Most focused validation sources and terminal logs remain outside the repository. The orchestration validation EA source is maintained under `mql5/Experts/XAUForge/Validation/`. For final reproducibility, the selected scripts, source revision, execution inputs and run manifests still require review before the Phase 7 exit gate.
+Most focused validation sources are now maintained in the repository under `mql5/Scripts/Tests/` and `mql5/Experts/XAUForge/Validation/`. Historical terminal/tester logs remain local, and the historical 118/118 result is kept separate from later replay runs. Source hashes, observed results and selected tester configurations appear below. Complete per-run manifests and retained runtime logs are not claimed for every historical observation.
 
 ## Focused Regression Results
 
@@ -621,10 +621,10 @@ remain outside this Phase 7 evidence.
 
 ## Open Evidence Before Phase 7 Exit
 
-- Reconcile the 21 acceptance criteria and 16 validation requirements of [Issue #17](https://github.com/PetrosTam/xauforge/issues/17) against the final branch source and reproducible evidence.
-- Review the production EA integration boundary without prematurely adding ownership or transaction-lifecycle behavior.
-- Run the verified project-level PowerShell build gate on the final source and review the complete branch diff.
-- Decide which currently external validation scripts belong in source control and retain enough configuration and provenance to reproduce important results.
-- Finalize representative spread calibration, documentation and the phase-gate decision before the Phase 7 exit gate.
+- Reconcile the final acceptance decision with [Issue #17](https://github.com/PetrosTam/xauforge/issues/17), explicitly distinguishing layered fail-safe evidence from exhaustive broker-failure injection.
+- Confirm the last code revision's clean project build and full PR diff; documentation-only follow-ups do not themselves modify compiled MQL5 behavior.
+- Review remaining source, tester-input and runtime-log provenance limitations and record the final reproducibility judgment; do not claim complete manifests where none exist.
+- Record that representative `MaxSpreadPoints` calibration remains a pre-deployment task; no production threshold is inferred from a short observation window.
+- Complete the final reviewer/PR exit-gate decision before merging or beginning Phase 8.
 
 Passing historical or simulated validation does not establish future profitability or suitability for live trading.
