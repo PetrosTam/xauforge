@@ -434,6 +434,54 @@ Approval 4 cases were already included in the historical
 118/118 focused results and must not be counted twice.
 The Submission Result 15 cases are reported separately.
 
+## Repository-Controlled Submission Safety Regression
+
+**Observed:** 2026-11-04 18:30:13, dedicated MT5 Strategy
+Tester, MetaQuotes-Demo XAUUSD/H1, tester build 6296.
+
+**Source:**
+`mql5/Experts/XAUForge/Validation/TradeManagerSubmissionValidation.mq5`
+
+**Original source SHA-256:**
+`D098B5AC9C1603831FFB05A9AF6A08E7788D50E58853EB6C14E37A25ACF48C69`
+
+The source was copied byte-for-byte from the isolated MT5
+validation directory. Dedicated MetaEditor compilation
+reported **0 errors and 0 warnings**.
+
+**Strategy Tester configuration:**
+
+- Period: 2026-10-01 to 2026-10-02
+- Model: Open prices only
+- Initial deposit: USD 100,000
+- Leverage: 1:100
+- Optimization: disabled
+- `ValidationEnablePositiveSubmission=false`
+
+The tester loaded:
+`Experts\XAUForge\Validation\TradeManagerSubmissionValidation.ex5`
+
+**Observed result:**
+`SUBMISSION_SAFETY_TEST_RESULT | passed=8 | failed=0 | total=8`
+
+**Completion:**
+`SUBMISSION_VALIDATION_COMPLETE | positive_path_invoked=false | order_send_attempted=false`
+
+The zero-volume request reached final OrderCheck and was
+rejected with retcode 10014 (Invalid volume), last_error=0.
+No OrderSend attempt was reported. Final tester balance
+remained USD 100,000.
+
+**Scope limitation:** This run demonstrates specific
+negative submission safety paths. It does not establish
+comprehensive fail-safe coverage of the full
+ExecuteApprovedTradeIntent pipeline or Phase 6 daily-loss
+integration invariants.
+
+These eight cases reproduce the historical Submission
+Safety suite already included in the reported 118/118
+focused results. They are not counted again.
+
 ## Open Evidence Before Phase 7 Exit
 
 - Reconcile the 21 acceptance criteria and 16 validation requirements of [Issue #17](https://github.com/PetrosTam/xauforge/issues/17) against the final branch source and reproducible evidence.
