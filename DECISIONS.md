@@ -118,7 +118,7 @@ XAUForge requires development, testing, documentation, licensing review, reprodu
 
 The `xauforge` repository remains private during development.
 
-Changing repository visibility to public is a manual owner decision made only after the Public Release Gate has passed.
+Changing repository visibility to public requires a manual decision after the Public Release Gate has passed.
 
 ### Rationale
 
@@ -130,9 +130,9 @@ Keeping the repository private during development allows the project to mature w
 - Public release requires an explicit review.
 - Secrets and repository history must be reviewed before publication.
 - Documentation and limitations must be suitable for public viewing before release.
-- The owner manually changes repository visibility.
+- Repository visibility is changed manually, never automatically.
 
-This visibility-timing decision was later replaced by ADR-016 after the repository became public during active development. The security, documentation, licensing, and manual-owner-control principles remain applicable.
+This visibility-timing decision was later replaced by ADR-016 after the repository became public during active development. The security, documentation, licensing, and manual-change requirements still apply.
 
 ---
 
@@ -636,7 +636,7 @@ Increasing the schema version makes the additional persisted field explicit and 
 
 ADR-004 originally required the `xauforge` repository to remain private throughout active development and to become public only after the formal Public Release Gate passed.
 
-During Phase 6, the repository owner manually changed the repository to public before the full roadmap and formal Public Release Gate were complete so that active development could be inspected publicly while the project remained explicitly work in progress.
+During Phase 6, the repository was made public manually before the roadmap and formal Public Release Gate were complete, allowing the ongoing engineering work to be inspected while XAUForge remained work in progress.
 
 The repository is therefore public while active development continues.
 
@@ -650,7 +650,7 @@ The `xauforge` repository may remain public while active development continues.
 
 This decision supersedes ADR-004 only with respect to the timing requirement that public visibility must wait until the formal Public Release Gate has passed.
 
-Repository visibility remains a manual owner decision and is never changed automatically.
+Repository visibility changes remain manual; they are never automated.
 
 Public visibility does not mean that XAUForge is complete, production-ready, validated for real-money use, or through the formal Public Release Gate.
 
@@ -675,7 +675,7 @@ Preserving the formal Public Release Gate as a quality gate keeps the original s
 - If sensitive credentials are ever exposed, credential rotation takes priority; deleting the current file alone is not sufficient if the value exists in Git history.
 - XAUForge-owned materials follow the current proprietary licensing policy in ADR-020; third-party licensing remains independent.
 - The formal Public Release Gate remains required before XAUForge is described as release-ready or fully validated.
-- Repository visibility changes remain manual owner actions; no automation may make the repository public or private.
+- Repository visibility is managed manually; no automation changes it between public and private.
 
 ---
 
