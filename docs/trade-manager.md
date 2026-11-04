@@ -1,10 +1,10 @@
-# Trade Manager — Phase 7
+# Trade Manager
 
 ## Scope and Current Status
 
 Phase 7 consumes an already-approved signal/risk plan. It does **not** generate strategy signals, choose the risk budget or own the final order/deal/position lifecycle.
 
-The `TradeManager.mqh` component is implemented and undergoing final validation. Its synchronous BUY path has been exercised in the Strategy Tester. **The main `XAUForge.mq5` EA does not yet call `ExecuteApprovedTradeIntent()`**, so a component-level test is not evidence of production EA trading integration.
+The `TradeManager.mqh` component has completed its scoped Phase 7 implementation and validation (PR #20 merged; Issue #17 closed). Its synchronous BUY submission path was exercised in the Strategy Tester under controlled conditions. **The main `XAUForge.mq5` EA does not yet call `ExecuteApprovedTradeIntent()`**, so component-level validation does not establish production EA trading integration or live-trading readiness.
 
 ## Pre-submission Flow
 
@@ -37,4 +37,4 @@ References: [MQL5 symbol properties](https://www.mql5.com/en/docs/constants/envi
 - `MaxSpreadPoints` is **not finalized**; one live spread sample window does not justify a universal threshold.
 - The quote-age policy must be explicitly configured; no undocumented production timeout is assumed.
 
-See [Phase 7 validation evidence](phase-7-validation.md) and [Issue #17](https://github.com/PetrosTam/xauforge/issues/17) for the open completion gate.
+See [Trade Manager validation evidence](trade-manager-validation.md) and [Issue #17](https://github.com/PetrosTam/xauforge/issues/17) for the scoped validation record and completed Phase 7 acceptance review.

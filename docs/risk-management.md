@@ -2,7 +2,7 @@
 
 This document describes the implemented Phase 6 risk-management behavior in XAUForge.
 
-Phase 6 is complete. Trade submission, `OrderCheck`, margin/request pre-flight, final broker stop-constraint enforcement, and position ownership enforcement are later-phase responsibilities and are not presented here as implemented.
+Phase 6 is complete. The Phase 7 TradeManager separately implements broker pre-flight, `OrderCheck()`, and synchronous order submission. These are not RiskManager responsibilities. The main EA does not yet invoke that execution path, and position ownership enforcement remains a Phase 8 responsibility.
 
 ## Scope
 
@@ -19,7 +19,7 @@ The implemented behavior covers:
 - cash-flow-adjusted daily-loss evaluation,
 - and a new-entry daily-loss gate.
 
-Phase 6 does not submit trades.
+The RiskManager does not submit trades. The main `XAUForge.mq5` EA also does not currently call `ExecuteApprovedTradeIntent()`.
 
 ## Risk Settings
 
@@ -74,7 +74,7 @@ The baseline risk/reward ratio is `2.0`.
 
 This Phase 6 trade plan is planned risk geometry, not final broker submission validation.
 
-If later broker pre-flight constraints require the stop distance to change, the volume must be recalculated from the final entry-to-stop distance before `OrderCheck`. That pre-trade broker validation belongs to Phase 7.
+If broker pre-flight changes the final entry-to-stop distance, the Phase 7 TradeManager recalculates volume from that final distance before `OrderCheck()`. The Phase 6 plan is not a broker-approved request.
 
 ## Planned Percentage-Equity Risk
 
@@ -112,7 +112,7 @@ The current EA uses the broker minimum volume as the reference volume supplied t
 
 Sizing fails safely if required numeric inputs are invalid, the BUY/SELL stop is on the wrong side of the entry, `OrderCalcProfit()` fails, or the resulting reference loss / raw volume is not finite and strictly positive.
 
-Because sizing is derived from the supplied entry and stop prices, Phase 7 must recalculate the volume if broker pre-flight changes the final stop distance.
+The Phase 7 TradeManager independently calculates final volume using the final entry and stop prices rather than assuming this preliminary Phase 6 volume remains valid.
 
 ## Conservative Broker-Volume Normalization
 
@@ -343,7 +343,7 @@ Observed result:
 SUMMARY | passed=15 | failed=0 | total=15
 ```
 
-This validates the Phase 6 sizing contract. Broker-driven SL adjustment remains a Phase 7 validation responsibility.
+This validates the Phase 6 sizing contract. Broker-driven final stop geometry and final volume sizing are addressed by Phase 7 and are not established by these Phase 6 tests.
 
 The temporary validation script is not part of the repository at this phase.
 
@@ -394,7 +394,7 @@ The following are intentionally not claimed as Phase 6 implementation:
 
 - final dynamic spread gate,
 - current trade/session availability pre-flight,
-- final broker stop/freeze-constraint enforcement,
+- initial-entry `StopsLevel` validation and `FreezeLevel` capability inspection,
 - SL adjustment caused by broker pre-flight constraints,
 - risk recalculation after a final SL adjustment,
 - independent margin validation,
@@ -403,13 +403,13 @@ The following are intentionally not claimed as Phase 6 implementation:
 - synchronous order submission,
 - immediate broker retcode handling.
 
-These belong to TradeManager / Phase 7.
+These belong to TradeManager / Phase 7. `FreezeLevel` is inspected, but it is not imposed as an additional initial-entry stop distance; restrictions on later modification and close operations are outside Phase 7.
 
 Position ownership enforcement is also not a Phase 6 responsibility; it belongs to the later Trade Lifecycle phase.
 
-The required invariant for Phase 7 is already established:
+The Phase 7 TradeManager implements this invariant:
 
-> if broker stop constraints force a different stop distance, position sizing must be recalculated from the final entry-to-stop move before `OrderCheck`.
+> If broker stop constraints force a different stop distance, position sizing must be recalculated from the final entry-to-stop move before `OrderCheck()`.
 
 ## Validation Summary
 
@@ -426,4 +426,4 @@ Phase 6 exit evidence includes:
 - deliberate staging and atomic Git commits,
 - and ADRs for significant risk, persistence, cash-flow, and repository decisions.
 
-Phase 6 is **Complete**. Phase 7 Trade Manager is under final validation; see [`trade-manager.md`](trade-manager.md) and [`phase-7-validation.md`](phase-7-validation.md). This document remains the Phase 6 risk-management record.
+Phase 6 is **Complete**, and the Phase 7 TradeManager component has been merged. The main EA does not yet call `ExecuteApprovedTradeIntent()`; Phase 8 position ownership and Phase 9 transaction lifecycle tracking remain separate development responsibilities. See [`trade-manager.md`](trade-manager.md) and [`trade-manager-validation.md`](trade-manager-validation.md) for the component scope and validation evidence. This document remains the Phase 6 risk-management record.
