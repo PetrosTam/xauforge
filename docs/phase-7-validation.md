@@ -260,6 +260,58 @@ not inject a session-lookup failure or demonstrate the complete
 These four new cases are reported separately from the
 historical 118/118 focused results.
 
+## Repository-Controlled Geometry and Final Risk Regression
+
+**Observed:** 2026-11-04, XAUUSD chart, dedicated MT5/MetaEditor.
+
+Four original validation sources were copied byte-for-byte into
+`mql5/Scripts/Tests/` and verified with SHA-256.
+
+| Source | Original SHA-256 |
+| --- | --- |
+| `TradeManagerDistanceConstraintsValidation.mq5` | `918451630BA69E104367FA14FCD701FF4605AB02A3EBB006F176D22DDEE301E1` |
+| `TradeManagerGeometryBoundaryValidation.mq5` | `27628BE33539CDD417D30CD35CAA98B2F7A4DCFB86C2979BAB5B9F38FBC01E1B` |
+| `TradeManagerGeometryValidation.mq5` | `B0D24A7D0E574DA9377F58A047A2B8D1EB64C855F8796EA380B807999A441509` |
+| `TradeManagerFinalRiskSizingValidation.mq5` | `9242389C27C1D2446DE733C24640378F905C9EC523B4F6EE6838C5D302AC8790` |
+
+All four scripts compiled with 0 errors and 0 warnings.
+
+**Observed execution results:**
+
+- 16:27:34 — `DISTANCE_CONSTRAINTS_TEST_RESULT | passed=4 | failed=0 | total=4`
+- 16:28:02 — `GEOMETRY_BOUNDARY_TEST_RESULT | passed=2 | failed=0 | total=2`
+- 16:28:24 — `GEOMETRY_TEST_RESULT | passed=22 | failed=0 | total=22`
+- 16:29:24 — `FINAL_RISK_SIZING_TEST_RESULT | passed=17 | failed=0 | total=17`
+
+**Total:** 45 passed, 0 failed across four repository-controlled suites.
+
+The broker observation showed `point=0.01`, `tick_size=0.01`,
+`stops_level=0` and `freeze_level=0`.
+
+Synthetic BUY and SELL widening tests increased the original
+stop distance from 0.50 to 2.10 price units, reducing raw
+volume from 20.00 to approximately 4.7619 lots.
+
+The tests verify that final volume sizing uses final geometry,
+conservative volume normalization remains intact, and the
+estimated SL loss stays within the planned monetary risk budget.
+
+The geometry tests also cover invalid-plan rejection,
+invalid-constraint rejection, tick normalization, and
+final-distance-based TP calculation.
+
+**Scope limitations:** StopsLevel widening was synthetic.
+The observed broker StopsLevel and FreezeLevel were both zero.
+These scripts do not demonstrate a nonzero FreezeLevel
+restriction or the complete OrderSend no-submission path.
+FreezeLevel is not applied as an initial market-entry
+stop-distance rule in the Phase 7 baseline.
+
+The 4 Distance Constraints and 17 Final Risk Sizing cases
+were already included in the historical 118/118 total.
+The 22 Geometry and 2 Geometry Boundary cases are reported
+separately and are not part of that historical subtotal.
+
 ## Open Evidence Before Phase 7 Exit
 
 - Reconcile the 21 acceptance criteria and 16 validation requirements of [Issue #17](https://github.com/PetrosTam/xauforge/issues/17) against the final branch source and reproducible evidence.
