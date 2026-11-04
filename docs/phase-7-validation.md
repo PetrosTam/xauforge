@@ -166,6 +166,55 @@ It does not simulate malformed tick data returned by a
 successful `SymbolInfoTick()` call, or prove the complete
 execution-orchestration no-submit path.
 
+## Repository-Controlled Trade Mode and Session Regression
+
+**Observed:** 2026-11-04, XAUUSD/H1.
+
+**Sources:**
+
+- `mql5/Scripts/Tests/TradeManagerTradeModeGateValidation.mq5`
+- `mql5/Scripts/Tests/TradeManagerSessionValidation.mq5`
+
+Both scripts were copied byte-for-byte from the original
+local validation sources.
+
+**Original source SHA-256:**
+
+- Trade Mode Gate: `F737233BDFB3E1FD9944AF71734EFD17FB4D6B1E92D19D4AFEBEAEEE42968129`
+- Session: `259E9C1C999A975DF96749F5BF03331DE550D153FC136AB10A1DD922F1734EB4`
+
+Both repository sources compiled using the dedicated
+MetaEditor installation with 0 errors and 0 warnings.
+
+**Observed results:**
+
+- 2026-11-04 05:12:08:
+  `TRADE_MODE_TEST_RESULT | passed=13 | failed=0 | total=13`
+- 2026-11-04 05:13:00:
+  `SESSION_WINDOW_TEST_RESULT | passed=10 | failed=0 | total=10`
+
+The Trade Mode Gate regression covers BUY/SELL permissions
+under FULL, LONGONLY, SHORTONLY, CLOSEONLY and DISABLED
+modes, plus invalid direction, unknown mode and reset state.
+
+The Session regression covers normal windows, exact
+boundaries, full-day and cross-midnight windows, and
+invalid inputs.
+
+Read-only broker observations showed XAUUSD trade mode
+FULL and a successful session evaluation with allowed=true.
+
+**Scope limitation:** The session tests exercise
+`IsTradeSessionWindowActive()` deterministically.
+The real broker-session observation was allowed, not blocked.
+These runs do not demonstrate a controlled
+`TRADE_SESSION_GATE_OUTSIDE_SESSION` result, broker-session
+lookup failure or the full execution no-submit path.
+
+The 13 Trade Mode and 10 Session cases replay existing
+historical suites and must not be counted as 23 additional
+tests on top of the reported historical 118/118 result.
+
 ## Open Evidence Before Phase 7 Exit
 
 - Reconcile the 21 acceptance criteria and 16 validation requirements of [Issue #17](https://github.com/PetrosTam/xauforge/issues/17) against the final branch source and reproducible evidence.
