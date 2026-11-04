@@ -571,6 +571,54 @@ all stale/unavailable market data, session, broker-rejection, or
 margin failure paths through the complete execution boundary.
 The comprehensive fail-safe acceptance criterion remains open.
 
+## Final Phase 7 Fail-Safe Control-Flow Audit
+
+**Reviewed revision:** `ad51bd5a0854c059b11db5c939e56881184e2719`
+(2026-11-04). Full XAUForge project build at this revision:
+**0 errors, 0 warnings**. Branch whitespace check passed;
+working tree clean; no tracked `.ex5` files.
+
+**Execution boundary:** `ExecuteApprovedTradeIntent()` in
+`mql5/Include/XAUForge/TradeManager.mqh` evaluates every
+pre-submission gate before calling `ExecuteSynchronousMarketSubmission()`.
+The latter is the only function in the file containing `OrderSend()`.
+It first validates the request, current trading permissions, and
+`OrderCheck()` approval (native boolean true **and** retcode zero).
+All rejected/failed paths return without reaching `OrderSend()`.
+
+| Failure category | Focused validation | Full-boundary / final-stage evidence |
+| --- | --- | --- |
+| Invalid symbol, settings, approved intent | Settings 6/6; geometry 22/22 | Orchestration negative cases PASS |
+| Missing/invalid market data; stale quote | Market snapshot 2/2; spread 13/13; freshness 11/11 | Source-reviewed early exits; spread blocked in orchestration |
+| Unsupported trade mode / closed session | Trade mode 13/13; session 10/10; weekend rejection 4/4 | Invalid direction blocked in orchestration; session early exit source-reviewed |
+| Invalid stops, final volume and risk budget | Geometry boundary 2/2; final sizing 17/17 | Invalid geometry, zero risk and below-minimum volume blocked in orchestration |
+| Insufficient margin / invalid request capabilities | Margin 16/16; request construction 20/20 | Source-reviewed early exits; no exhaustive orchestration injection |
+| Disabled permissions / rejected `OrderCheck()` | Permissions 10/10; OrderCheck 7/7; approval 4/4 | Submission Safety 8/8; zero volume retcode 10014; no `OrderSend()` |
+| Immediate server rejection / unknown retcode | Submission result classification 15/15 | Immediate-result classification only; not a guaranteed final lifecycle state |
+
+**Most recent full-boundary negative run:** XAUUSD/H1,
+MetaQuotes-Demo, tester build 6296, 2026-11-04 19:52:00 local;
+seven negative cases passed, zero failed, and one optional
+positive submission case was skipped. Reported
+`order_send_attempted=false`, `no_retry=true`; final tester
+balance was unchanged at USD 100,000.
+
+**Audit conclusion:** The code review identified no
+pre-flight rejection branch that bypasses the checks and
+reaches `OrderSend()`. Combined focused regressions, the
+seven full-boundary negative cases, and eight final-stage
+submission safety checks support a Phase 7 fail-safe
+acceptance review without adding artificial dependencies or
+modifying the production execution path.
+
+**Explicit limits:** Not every market/broker failure was
+injected through the full boundary; this is layered evidence,
+not exhaustive proof. The main `XAUForge.mq5` still does
+not invoke `ExecuteApprovedTradeIntent()`. Live trading,
+Phase 8/9 position ownership and lifecycle, real-tick
+execution delays, and any future approved-intent handoff
+remain outside this Phase 7 evidence.
+
 ## Open Evidence Before Phase 7 Exit
 
 - Reconcile the 21 acceptance criteria and 16 validation requirements of [Issue #17](https://github.com/PetrosTam/xauforge/issues/17) against the final branch source and reproducible evidence.
