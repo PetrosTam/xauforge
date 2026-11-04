@@ -312,6 +312,74 @@ were already included in the historical 118/118 total.
 The 22 Geometry and 2 Geometry Boundary cases are reported
 separately and are not part of that historical subtotal.
 
+## Repository-Controlled Margin, OrderCheck and Permissions Regression
+
+**Observed:** 2026-11-04, XAUUSD chart, dedicated MT5/MetaEditor.
+
+**Sources:**
+
+- `mql5/Scripts/Tests/TradeManagerMarginValidation.mq5`
+- `mql5/Scripts/Tests/TradeManagerOrderCheckValidation.mq5`
+- `mql5/Scripts/Tests/TradeManagerSubmissionPermissionValidation.mq5`
+
+**Original source SHA-256:**
+
+- Margin: `C85F0F763985CD79F836B8AB30E079E06AFB970FF04226DEB450017B92BE9B45`
+- OrderCheck: `0B4E898060FAAF91C4D0828D344A6C50199D080BE0AC02295F01E67C891D12C9`
+- Submission Permission: `D702954A31D1076BA72AF4F8AE47C0C4C6478B231FFB4A66989269270662D135`
+
+The repository OrderCheck source was deliberately corrected
+to derive expected approval from both the OrderCheck boolean
+result and retcode == 0.
+
+**Corrected OrderCheck source SHA-256:**
+`64CCF14C9809B04501276BBA412118DFF3469A4042287F0BEC8506BA6F384942`
+
+All three repository sources compiled with 0 errors and
+0 warnings using the dedicated MetaEditor installation.
+
+**Observed execution results:**
+
+- 16:56:19: `MARGIN_TEST_RESULT | passed=16 | failed=0 | total=16`
+- 16:56:49: `ORDER_CHECK_TEST_RESULT | passed=7 | failed=0 | total=7`
+- 16:57:19: `SUBMISSION_PERMISSION_TEST_RESULT | passed=10 | failed=0 | total=10`
+
+**Total observed:** 33 passed, 0 failed across three suites.
+
+Margin tests covered synthetic insufficient free margin,
+invalid inputs, broker OrderCalcMargin comparisons for BUY
+and SELL, and current account margin consistency.
+
+OrderCheck returned last_error=4752 and retcode=10027
+(TRADE_RETCODE_CLIENT_DISABLES_AT), with the message
+"AutoTrading disabled by client".
+
+Both normal BUY/SELL requests and the request containing
+zero volume were rejected under this terminal configuration.
+The wrapper returned allowed=false and
+TRADE_REQUEST_CHECK_REJECTED.
+
+**Important limitation:** The zero-volume test passed
+because the request was rejected, but its observed retcode
+was 10027, not TRADE_RETCODE_INVALID_VOLUME (10014).
+This run does not isolate invalid volume as the rejection
+cause and does not exercise successful OrderCheck approval.
+
+The current submission-permission observation reported
+TRADE_SUBMISSION_PERMISSION_TERMINAL_TRADING_DISABLED.
+Synthetic permission cases covered disconnected terminal,
+disabled trading permissions, valid permissions, and
+Strategy Tester connection handling.
+
+These scripts do not call OrderSend and do not independently
+prove a complete ExecuteApprovedTradeIntent no-submit path.
+The OrderCheck script makes read-only preflight checks.
+
+The 16 Margin tests replay a suite already included in the
+historical 118/118 results. The 7 OrderCheck and 10
+Submission Permission cases are recorded separately rather
+than added to that historical subtotal.
+
 ## Open Evidence Before Phase 7 Exit
 
 - Reconcile the 21 acceptance criteria and 16 validation requirements of [Issue #17](https://github.com/PetrosTam/xauforge/issues/17) against the final branch source and reproducible evidence.
