@@ -380,6 +380,60 @@ historical 118/118 results. The 7 OrderCheck and 10
 Submission Permission cases are recorded separately rather
 than added to that historical subtotal.
 
+## Repository-Controlled Legacy Regression Reproduction
+
+**Observed:** 2026-11-04, dedicated MT5/MetaEditor, XAUUSD chart.
+
+Four legacy validation sources were copied byte-for-byte
+from the isolated MT5 installation into the repository.
+
+**Sources and original SHA-256:**
+
+- `mql5/Scripts/Tests/TradeManagerSettingsValidation.mq5`
+  `16942E8ED7ED1EEE69D16EEC4C15E91ECF26A94D0B316B610DA8FF9CAF6FC96C`
+- `mql5/Scripts/Tests/TradeManagerSubmissionResultValidation.mq5`
+  `BEB6667F0F6EC22A57FB7CD328E336FCDA8BB5F61B3254C45C60D19B55057337`
+- `mql5/Experts/XAUForge/Validation/TradeManagerQuoteFreshnessValidation.mq5`
+  `F0453964DCE765D6942761D6AB0257D315204ADAD072844FD0AEEADA8A97DC4E`
+- `mql5/Experts/XAUForge/Validation/TradeManagerOrderCheckApprovalRegression.mq5`
+  `7ACBE053226E6FCC9B3831841FFD32D65EE5247E89A6969C3835CCD7B6856309`
+
+All four sources compiled with 0 errors and 0 warnings
+using the dedicated MetaEditor installation.
+
+**Observed execution results:**
+
+- 17:33:45 — `TRADE_SETTINGS_TEST_RESULT | passed=6 | failed=0 | total=6`
+- 17:34:13 — `SUBMISSION_RESULT_TEST_RESULT | passed=15 | failed=0 | total=15`
+- 17:35:12 — `QUOTE_FRESHNESS_TEST_RESULT | passed=11 | failed=0 | total=11`
+- 17:37:09 — `ORDER_CHECK_APPROVAL_TEST_RESULT | passed=4 | failed=0 | total=4`
+
+**Total observed:** 36 passed, 0 failed.
+
+Trade settings tests cover invalid MaxSpreadPoints and
+MaxQuoteAgeSeconds settings.
+
+Submission result tests exercise synthetic immediate
+OrderSend return values and retcodes, including DONE,
+REQUOTE, REJECT, TIMEOUT, INVALID_VOLUME, INVALID_STOPS,
+NO_MONEY, and unknown retcodes.
+
+Quote freshness tests cover quote-age boundaries, stale
+and future quotes, missing timestamps, and invalid settings.
+
+OrderCheck approval tests verify that approval requires
+both a true native boolean result and retcode == 0.
+
+**Scope limitations:** The results are focused validation
+checks, not whole-production-EA integration evidence.
+Submission result classification uses synthetic native
+results; it does not submit broker orders.
+
+The Trade Settings 6, Quote Freshness 11, and OrderCheck
+Approval 4 cases were already included in the historical
+118/118 focused results and must not be counted twice.
+The Submission Result 15 cases are reported separately.
+
 ## Open Evidence Before Phase 7 Exit
 
 - Reconcile the 21 acceptance criteria and 16 validation requirements of [Issue #17](https://github.com/PetrosTam/xauforge/issues/17) against the final branch source and reproducible evidence.
