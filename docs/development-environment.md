@@ -101,6 +101,9 @@ C:\MT5\XAUForge\MQL5\Experts\XAUForge
 
 C:\MT5\XAUForge\MQL5\Include\XAUForge
     -> C:\Dev\xauforge\mql5\Include\XAUForge
+
+C:\MT5\XAUForge\MQL5\Scripts\Tests
+    -> C:\Dev\xauforge\mql5\Scripts\Tests
 ```
 
 Create or verify this linkage from the repository root with:

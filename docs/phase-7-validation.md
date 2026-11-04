@@ -4,7 +4,7 @@
 
 Phase 7 is under final review. The results below were observed in the dedicated MetaTrader 5 / MetaEditor portable environment on **MetaTrader build 6235**, using the MetaQuotes-Demo XAUUSD symbol. Some scripts ran as one-shot chart scripts; others ran as controlled Strategy Tester validation EAs. They are focused engineering checks, **not** a complete production EA integration suite.
 
-Most focused validation sources and terminal logs remain outside the repository. The orchestration validation EA source is maintained under `mql5/Experts/XAUForge/Validation/`. For final reproducibility, the selected scripts, source revision, execution inputs and run manifests still require review before the Phase 7 PR.
+Most focused validation sources and terminal logs remain outside the repository. The orchestration validation EA source is maintained under `mql5/Experts/XAUForge/Validation/`. For final reproducibility, the selected scripts, source revision, execution inputs and run manifests still require review before the Phase 7 exit gate.
 
 ## Focused Regression Results
 
@@ -67,12 +67,43 @@ This validates the submission-inhibition branch, not
 a normal successful test-suite run.
 These runs exercise one controlled route with `Open prices only`. They are not the whole-EA integration, deterministic custom-symbol regression, or real-tick execution-delay validation layers required later in the roadmap.
 
+## Repository-Controlled Request Construction Regression
+
+**Observed:** 2026-11-04 at 03:26:50 local time, XAUUSD/H1.
+
+**Source:** `mql5/Scripts/Tests/TradeManagerRequestConstructionValidation.mq5`
+
+**Source SHA-256:** `47AB050E71C47BDBA5C8749FCBA8F8D91FFAA7D8B8C8B38F0ED210C9295A6D59`
+
+The source was copied byte-for-byte from the previously executed local
+validation script. The repository copy compiled with 0 errors and
+0 warnings using the dedicated MetaEditor installation.
+
+The script was executed through the verified repository-to-MT5
+`Scripts/Tests` junction.
+
+**Observed result:**
+
+`REQUEST_BUILD_TEST_RESULT | passed=20 | failed=0 | total=20`
+
+The 20 focused cases cover filling-policy selection, BUY/SELL request
+construction, execution-mode-specific request fields, unsupported broker
+capabilities, symbol consistency, and invalid geometry/risk inputs.
+
+The read-only broker capability observation reported XAUUSD,
+`SYMBOL_TRADE_EXECUTION_MARKET`, order mode 127, filling mode 3,
+and selected `ORDER_FILLING_FOK`.
+
+The script does not call `OrderCheck()` or `OrderSend()`.
+This validates request-building decisions, not trade execution,
+broker acceptance, or whole-EA integration.
+
 ## Open Evidence Before Phase 7 Exit
 
 - Reconcile the 21 acceptance criteria and 16 validation requirements of [Issue #17](https://github.com/PetrosTam/xauforge/issues/17) against the final branch source and reproducible evidence.
 - Review the production EA integration boundary without prematurely adding ownership or transaction-lifecycle behavior.
 - Run the verified project-level PowerShell build gate on the final source and review the complete branch diff.
 - Decide which currently external validation scripts belong in source control and retain enough configuration and provenance to reproduce important results.
-- Finalize representative spread calibration, documentation and the phase-gate decision before opening the PR.
+- Finalize representative spread calibration, documentation and the phase-gate decision before the Phase 7 exit gate.
 
 Passing historical or simulated validation does not establish future profitability or suitability for live trading.

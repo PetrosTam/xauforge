@@ -65,6 +65,10 @@ $links = @(
     @{
         Source = Join-Path $repoRoot "mql5\Include\XAUForge"
         Destination = Join-Path $mql5Root "Include\XAUForge"
+    },
+    @{
+        Source = Join-Path $repoRoot "mql5\Scripts\Tests"
+        Destination = Join-Path $mql5Root "Scripts\Tests"
     }
 )
 
