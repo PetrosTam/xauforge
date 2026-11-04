@@ -215,6 +215,51 @@ The 13 Trade Mode and 10 Session cases replay existing
 historical suites and must not be counted as 23 additional
 tests on top of the reported historical 118/118 result.
 
+## Repository-Controlled Session Gate Rejection Regression
+
+**Observed:** 2026-11-04 at 15:49:16 local time, XAUUSD chart.
+
+**Source:** `mql5/Scripts/Tests/TradeManagerSessionGateRejectionValidation.mq5`
+
+**Initial source SHA-256:** `8190000854F88C3C8F6B9C46D19BE5CFFC5636553DBB7ED4E7CDF1170466701C`
+
+The source compiled with the dedicated MetaEditor installation
+using 0 errors and 0 warnings.
+
+**Observed result:**
+
+`SESSION_GATE_REJECTION_TEST_RESULT | passed=4 | failed=0 | total=4`
+
+Two invalid-input cases passed:
+
+- Empty symbol rejected with `TRADE_SESSION_GATE_INVALID_INPUT`.
+- Invalid broker time rejected with `TRADE_SESSION_GATE_INVALID_INPUT`.
+
+Two broker-aware session rejection cases passed:
+
+- Saturday 2026-11-07 12:00:00 returned
+  `TRADE_SESSION_GATE_OUTSIDE_SESSION`.
+- Sunday 2026-11-08 12:00:00 returned
+  `TRADE_SESSION_GATE_OUTSIDE_SESSION`.
+
+Both weekend checks returned `evaluation_success=true`
+and `allowed=false`.
+
+The weekend timestamps are controlled synthetic broker times,
+not the actual time of execution. The checks use the broker's
+published trading-session schedule for the attached symbol.
+
+The script calls `EvaluateTradeSessionGate()` directly and
+does not call `OrderCheck()` or `OrderSend()`.
+
+**Scope limitation:** This validates the session-unavailable
+rejection decision for the observed broker schedule. It does
+not inject a session-lookup failure or demonstrate the complete
+`ExecuteApprovedTradeIntent()` no-submission path.
+
+These four new cases are reported separately from the
+historical 118/118 focused results.
+
 ## Open Evidence Before Phase 7 Exit
 
 - Reconcile the 21 acceptance criteria and 16 validation requirements of [Issue #17](https://github.com/PetrosTam/xauforge/issues/17) against the final branch source and reproducible evidence.
