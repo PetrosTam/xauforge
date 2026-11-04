@@ -98,6 +98,46 @@ The script does not call `OrderCheck()` or `OrderSend()`.
 This validates request-building decisions, not trade execution,
 broker acceptance, or whole-EA integration.
 
+## Repository-Controlled Spread Gate Regression
+
+**Observed:** 2026-11-04 at 04:27:03 local time, XAUUSD/H1.
+
+**Source:** `mql5/Scripts/Tests/TradeManagerSpreadGateValidation.mq5`
+
+The original five-case spread-gate validation script was copied
+into the repository and extended with eight deterministic negative
+market-snapshot cases.
+
+The repository source compiled with 0 errors and 0 warnings
+using the dedicated MetaEditor installation.
+
+**Observed result:**
+
+`SPREAD_GATE_TEST_RESULT | passed=13 | failed=0 | total=13`
+
+The five original cases cover spread thresholds, invalid
+snapshot ordering, and invalid spread settings.
+
+The eight added cases verify rejection of zero/negative Bid,
+zero/negative Ask, zero/negative point, missing timestamp,
+and empty symbol.
+
+For invalid snapshots, the observed result was
+`evaluation_success=false`, `allowed=false`, and
+`SPREAD_GATE_INVALID_INPUT`.
+
+The read-only broker snapshot observation returned
+`loaded=true`, Bid 3938.53, Ask 3938.70, and point 0.01.
+
+This validates deterministic rejection inside
+`EvaluateSpreadGate()`. It does not directly inject a failed
+`SymbolInfoTick()` call into `LoadPreTradeMarketSnapshot()`,
+and it does not establish the full no-submission execution path.
+
+The original five tests were already included in the
+historical 118/118 focused results. The eight additional
+cases are new and are reported separately here.
+
 ## Open Evidence Before Phase 7 Exit
 
 - Reconcile the 21 acceptance criteria and 16 validation requirements of [Issue #17](https://github.com/PetrosTam/xauforge/issues/17) against the final branch source and reproducible evidence.
