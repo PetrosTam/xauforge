@@ -569,7 +569,7 @@ orchestration harness, not seven additional tests on top of the
 previous 5 PASS / 0 FAIL / 1 SKIP run. It does not demonstrate
 all stale/unavailable market data, session, broker-rejection, or
 margin failure paths through the complete execution boundary.
-The comprehensive fail-safe acceptance criterion remains open.
+This seven-case run alone did not establish comprehensive coverage; the scoped fail-safe criterion was subsequently accepted using layered evidence and the control-flow audit below.
 
 ## Final Phase 7 Fail-Safe Control-Flow Audit
 
@@ -607,9 +607,9 @@ balance was unchanged at USD 100,000.
 pre-flight rejection branch that bypasses the checks and
 reaches `OrderSend()`. Combined focused regressions, the
 seven full-boundary negative cases, and eight final-stage
-submission safety checks support a Phase 7 fail-safe
-acceptance review without adding artificial dependencies or
-modifying the production execution path.
+submission safety checks support the scoped Phase 7
+pre-submission fail-safe criterion accepted in Issue #17
+(21/21 acceptance criteria, 16/16 focused validation items).
 
 **Explicit limits:** Not every market/broker failure was
 injected through the full boundary; this is layered evidence,
@@ -621,7 +621,7 @@ remain outside this Phase 7 evidence.
 
 ## Open Evidence Before Phase 7 Exit
 
-- Reconcile the final acceptance decision with [Issue #17](https://github.com/PetrosTam/xauforge/issues/17), explicitly distinguishing layered fail-safe evidence from exhaustive broker-failure injection.
+- Issue #17 now records 21/21 scoped Phase 7 acceptance criteria and 16/16 focused validations; retain the distinction between layered evidence and exhaustive broker-failure injection.
 - Confirm the last code revision's clean project build and full PR diff; documentation-only follow-ups do not themselves modify compiled MQL5 behavior.
 - Review remaining source, tester-input and runtime-log provenance limitations and record the final reproducibility judgment; do not claim complete manifests where none exist.
 - Record that representative `MaxSpreadPoints` calibration remains a pre-deployment task; no production threshold is inferred from a short observation window.
