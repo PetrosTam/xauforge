@@ -22,7 +22,7 @@ Exit evidence:
 
 Exit evidence:
 
-- Repository created private for the original bootstrap; later visibility change is recorded in [`DECISIONS.md`](DECISIONS.md)
+- Git repository foundation and visibility decisions documented in [`DECISIONS.md`](DECISIONS.md)
 - Current licensing policy documented in [LICENSE](LICENSE) and [ADR-020](DECISIONS.md#adr-020--proprietary-licensing-for-xauforge)
 - Repository foundation pull request
 - Dedicated [MetaTrader 5](https://www.metatrader5.com/en/terminal/help) and [MetaEditor](https://www.metatrader5.com/en/metaeditor/help) instance in `/portable` mode
@@ -101,7 +101,9 @@ Exit evidence:
 
 ## Phase 7 — Trade Manager
 
-**Status:** In Progress — final validation ([Issue #17](https://github.com/PetrosTam/xauforge/issues/17)); not yet merged
+**Status:** Complete — merged through [PR #20](https://github.com/PetrosTam/xauforge/pull/20); [Issue #17](https://github.com/PetrosTam/xauforge/issues/17) closed.
+
+Implementation scope and validation evidence are documented in [`docs/trade-manager.md`](docs/trade-manager.md) and [`docs/trade-manager-validation.md`](docs/trade-manager-validation.md).
 
 Exit evidence:
 
@@ -112,6 +114,8 @@ Exit evidence:
 - [`OrderCheck`](https://www.mql5.com/en/docs/trading/ordercheck)
 - Synchronous broker-valid trade submission
 - Immediate trade retcode handling
+
+**Scope boundary:** `TradeManager.mqh` contains the synchronous submission path, but the main `XAUForge.mq5` does not yet invoke `ExecuteApprovedTradeIntent()`. Position ownership, authoritative transaction tracking, and restart recovery belong to later phases. Phase 7 completion does not establish production trading readiness.
 
 ## Phase 8 — Trade Lifecycle
 
@@ -235,8 +239,8 @@ Exit evidence:
 
 ## Current Position
 
-Phases 0 through 6 are complete.
+Phases 0 through 7 are complete against their respective scoped exit criteria.
 
-Phase 7 — Trade Manager is under final validation on the local feature branch, tracked by [Issue #17](https://github.com/PetrosTam/xauforge/issues/17). The component has focused test evidence, but the production `XAUForge.mq5` does not yet invoke trade submission. Phase 7 is not marked complete; acceptance and final branch review remain open.
+Phase 8 — Trade Lifecycle is the next unfinished phase and has not started. Phase 7 TradeManager pre-submission behavior has focused validation and controlled Strategy Tester evidence, but the main `XAUForge.mq5` does not call `ExecuteApprovedTradeIntent()`. Production trade integration, position ownership enforcement, transaction lifecycle tracking, and restart recovery remain outside the completed Phase 7 scope.
 
-Repository visibility is separate from project completion; [ADR-016](DECISIONS.md#adr-016--repository-visibility-is-public-during-active-development) records the earlier visibility decision. The formal Public Release Gate and Phase 18 remain incomplete.
+Repository visibility is governed by [ADR-016](DECISIONS.md#adr-016--repository-visibility-is-public-during-active-development). The formal Public Release Gate and Phase 18 remain incomplete.

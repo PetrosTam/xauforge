@@ -1,8 +1,10 @@
-# Phase 7 — Validation Evidence
+# Trade Manager Validation
 
 ## Status and Provenance
 
-Phase 7 is under final review. Earlier historical validation observations used MetaTrader build 6235; later repository-controlled Strategy Tester runs used build 6296. All took place within the dedicated MetaTrader 5 / MetaEditor portable environment, using MetaQuotes-Demo XAUUSD. Some checks were one-shot chart scripts and others were Strategy Tester validation EAs. These are focused engineering checks, **not** a complete production EA integration suite.
+Phase 7 Trade Manager completed its scoped component-level implementation and validation. [PR #20](https://github.com/PetrosTam/xauforge/pull/20) was merged into `main` on 2026-11-04, and [Issue #17](https://github.com/PetrosTam/xauforge/issues/17) was closed as completed.
+
+Earlier historical validation observations used MetaTrader build 6235; later repository-controlled Strategy Tester runs used build 6296. All took place within the dedicated MetaTrader 5 / MetaEditor portable environment, using MetaQuotes-Demo XAUUSD. Some checks were one-shot chart scripts and others were Strategy Tester validation EAs. These are focused engineering checks, **not** a complete production EA integration suite.
 
 Most focused validation sources are now maintained in the repository under `mql5/Scripts/Tests/` and `mql5/Experts/XAUForge/Validation/`. Historical terminal/tester logs remain local, and the historical 118/118 result is kept separate from later replay runs. Source hashes, observed results and selected tester configurations appear below. Complete per-run manifests and retained runtime logs are not claimed for every historical observation.
 
@@ -55,7 +57,7 @@ The positive run's simulated order reached Take Profit at 4144.61, with a final 
 
 **How to reproduce:** verify the repository-to-MT5 `Experts/XAUForge` and `Include/XAUForge` junctions with `scripts/setup-mt5.ps1`. In MetaEditor, open the **repository-linked** Expert source above and compile it directly (F7, 0 errors / 0 warnings). In the MT5 Strategy Tester select `Experts\XAUForge\Validation\TradeManagerOrchestrationValidation.ex5`, set the environment and inputs above, and execute the default negative-only run first. The positive run requires an explicit `true` input and must only be performed in the Strategy Tester. Never attach this harness to a live chart.
 
-**Repository-controlled verification (2026-11-03):** The corrected source was copied byte-for-byte into the repository and compiled with 0 errors and 0 warnings. Two Strategy Tester runs used `Experts\XAUForge\Validation\TradeManagerOrchestrationValidation.ex5`: negative-only at 16:18 local (3 PASS, 0 FAIL, 1 SKIP, no submission) and positive opt-in at 16:22 local (4 PASS, 0 FAIL, 0 SKIP, one simulated BUY submission, no retry reported). These runs are separate evidence from the historical 118/118 focused suite results. The final commit SHA, complete run manifests and selected execution logs remain to be recorded.
+**Repository-controlled verification (2026-11-03):** The corrected source was copied byte-for-byte into the repository and compiled with 0 errors and 0 warnings. Two Strategy Tester runs used `Experts\XAUForge\Validation\TradeManagerOrchestrationValidation.ex5`: negative-only at 16:18 local (3 PASS, 0 FAIL, 1 SKIP, no submission) and positive opt-in at 16:22 local (4 PASS, 0 FAIL, 0 SKIP, one simulated BUY submission, no retry reported). These runs are separate evidence from the historical 118/118 focused suite results. The later PR merge does not retroactively provide complete per-run manifests or retained execution logs for these historical runs.
 
 **Failure-injection regression (2026-11-04):** With
 `ValidationMaxQuoteAgeSeconds=0` and
@@ -619,12 +621,12 @@ Phase 8/9 position ownership and lifecycle, real-tick
 execution delays, and any future approved-intent handoff
 remain outside this Phase 7 evidence.
 
-## Open Evidence Before Phase 7 Exit
+## Phase 7 Exit Record and Remaining Validation Boundaries
 
-- Issue #17 now records 21/21 scoped Phase 7 acceptance criteria and 16/16 focused validations; retain the distinction between layered evidence and exhaustive broker-failure injection.
-- Confirm the last code revision's clean project build and full PR diff; documentation-only follow-ups do not themselves modify compiled MQL5 behavior.
-- Review remaining source, tester-input and runtime-log provenance limitations and record the final reproducibility judgment; do not claim complete manifests where none exist.
-- Record that representative `MaxSpreadPoints` calibration remains a pre-deployment task; no production threshold is inferred from a short observation window.
-- Complete the final reviewer/PR exit-gate decision before merging or beginning Phase 8.
+- [Issue #17](https://github.com/PetrosTam/xauforge/issues/17) closed as completed after recording 21/21 scoped acceptance criteria and 16/16 focused validation items. These results reflect layered validation and source review, not exhaustive broker-failure injection.
+- [PR #20](https://github.com/PetrosTam/xauforge/pull/20) merged into `main` on 2026-11-04 (merge commit `b673f36d98be6e311fd78b2f49acef6be72b40fc`). The clean build and code audit documented above apply to the recorded reviewed revision; this documentation update is not a new build or test run.
+- Incomplete per-run manifests, locally retained historical runtime logs, and remaining tester-input provenance gaps limit reproducibility. They are not presented as complete archived evidence.
+- Representative `MaxSpreadPoints` calibration remains a pre-deployment task; the short spread observation window does not establish a production threshold.
+- Production EA submission integration, position ownership, transaction tracking, position recovery, realistic execution-delay tests and demo validation remain outside the completed Phase 7 scope. Its merge is not approval for live trading.
 
 Passing historical or simulated validation does not establish future profitability or suitability for live trading.

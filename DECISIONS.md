@@ -236,16 +236,16 @@ Trade submission is synchronous in the baseline.
 
 `CTrade` asynchronous mode remains disabled initially.
 
-`OnTradeTransaction` tracks the authoritative server-side trade lifecycle.
+`OnTradeTransaction` will provide authoritative server-side lifecycle tracking when the Transaction Tracking phase (Phase 9) is implemented.
 
 ### Rationale
 
-Synchronous submission simplifies immediate request and retcode handling while `OnTradeTransaction` still provides authoritative information about orders, deals, and positions after the server processes trading activity.
+Synchronous submission simplifies immediate request and retcode handling. Final order, deal, and position state must be reconciled from the broker transaction lifecycle rather than inferred from the `OrderSend()` return value.
 
 ### Consequences
 
 - Immediate submission results are handled synchronously.
-- `OnTradeTransaction` remains authoritative for lifecycle tracking.
+- `OnTradeTransaction` will be authoritative for lifecycle tracking once Phase 9 is implemented.
 - The transaction handler must remain lightweight.
 - Asynchronous submission is not introduced without a justified requirement.
 
@@ -353,7 +353,7 @@ This keeps broker normalization conservative and consistent with the project's s
 - Actual planned price risk can be lower than the configured risk budget.
 - A normalized volume below `SYMBOL_VOLUME_MIN` causes the entry to be rejected.
 - Floating-point tolerances and broker-step boundary behavior must be covered by tests.
-- Broker request and margin validation remain separate later checks and are not replaced by volume normalization.
+- Broker request and margin validation are separate TradeManager checks in Phase 7; volume normalization does not replace them.
 
 ---
 
@@ -719,7 +719,7 @@ If the reference loss cannot be evaluated, is non-finite, or is not strictly pos
 
 Broker-volume normalization is a separate step governed by ADR-011.
 
-Final broker stop/freeze validation, independent margin/request validation, and `OrderCheck` belong to Phase 7. If Phase 7 broker pre-flight changes the final entry-to-stop distance, position sizing must be recalculated from that final distance before `OrderCheck`.
+Initial-entry `StopsLevel` validation, `FreezeLevel` capability inspection, independent margin/request validation, and `OrderCheck()` belong to Phase 7. Freeze-related restrictions on later modification or close operations belong to subsequent phases. If broker pre-flight changes the final entry-to-stop distance, position sizing must be recalculated before `OrderCheck()`.
 
 ### Rationale
 

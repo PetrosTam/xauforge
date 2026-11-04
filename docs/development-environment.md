@@ -1,12 +1,12 @@
 # Development Environment
 
-XAUForge uses a dedicated MetaTrader 5 installation in portable mode while keeping the Git repository as the source of truth for project-controlled source code.
+XAUForge uses a dedicated MetaTrader 5 installation in `/portable` mode. The Git repository remains the source of truth for project-controlled MQL5 source, scripts, and documentation.
 
-This document describes the verified local development/build environment. It does not define trading strategy, risk policy, or execution behavior; those responsibilities are documented elsewhere.
+This document records the verified local environment and the repeatable setup and build workflow. Strategy, risk policy, and trade execution behavior are documented separately.
 
 ## Verified Environment
 
-The current development workflow has been verified with:
+The repository build loop was verified with the following recorded environment:
 
 - MetaTrader 5 version 5.00, build 6231, 27 Sep 2026
 - MetaEditor version 5.00, build 6231, 27 Sep 2026
@@ -14,9 +14,9 @@ The current development workflow has been verified with:
 - Active-development compilation: No Optimization
 - Compile quality gate: 0 errors and 0 warnings
 
-MetaTrader 5 can update independently through its platform update mechanism. The environment is therefore not treated as a bit-for-bit frozen toolchain.
+Later Phase 7 validation recorded MT5/MetaEditor build 6235 and Strategy Tester agent build 6296 for specific runs. These are recorded observations, not a claim about the version currently installed. See [Trade Manager validation evidence](trade-manager-validation.md).
 
-After a meaningful MetaTrader 5 or MetaEditor build change, representative build and test baselines should be rerun and the new build information recorded.
+MetaTrader 5 can update independently. The environment is not a bit-for-bit frozen toolchain. Record the actual platform builds for important validation runs and rerun representative baselines after meaningful MT5 or MetaEditor updates.
 
 ## Directory Model
 
@@ -72,16 +72,20 @@ Project-controlled MQL5 source remains inside the repository:
 mql5\
 ├── Experts\
 │   └── XAUForge\
+│       ├── Validation\
 │       ├── XAUForge.mq5
 │       └── XAUForge.mqproj
-└── Include\
-    └── XAUForge\
-        ├── StrategyEngine.mqh
-        ├── SymbolManager.mqh
-        └── RiskManager.mqh
+├── Include\
+│   └── XAUForge\
+│       ├── StrategyEngine.mqh
+│       ├── SymbolManager.mqh
+│       ├── RiskManager.mqh
+│       └── TradeManager.mqh
+└── Scripts\
+    └── Tests\
 ```
 
-This tree reflects the current repository state after Phase 6. Later roadmap files are not created early merely because they appear in the target repository structure.
+This tree reflects the source layout through Phase 7. The `mql5\Experts\XAUForge\Validation` and `mql5\Scripts\Tests` directories contain tracked TradeManager validation sources. It does not list files planned for later phases.
 
 The repository is the authoritative location for project-controlled source, configuration, scripts, and documentation.
 
@@ -149,32 +153,15 @@ The project is configured as an Expert Advisor and currently uses:
 - No Optimization during active development,
 - floating-point divider checks enabled.
 
-The project uses:
-
-```text
-XAUForge.mq5
-```
-
-as the relative compile target. Project headers are reached through the MQL5 include path and repository-to-MT5 linkage.
+The project lists `XAUForge.mq5` as its relative compile target (`compile: true`). Supporting headers, including `TradeManager.mqh`, are listed as project entries with `compile: false` and resolved through the MQL5 include path and repository-to-MT5 linkage.
 
 The `.mqproj` file is the project-level build definition. Project-controlled build settings should not be duplicated inconsistently in source files.
 
-## Initial Compile-Loop Baseline
+## Compile-Loop Baseline
 
-During the Phase 1 / Phase 2 environment bootstrap, the build loop was intentionally verified with a minimal Expert Advisor:
+The isolated setup and build loop were established before trading logic was introduced. The same repository-to-MT5 linkage and project-based compile wrapper remain in use with the Phase 7 source tree.
 
-```mql5
-int OnInit()
-{
-   return(INIT_SUCCEEDED);
-}
-```
-
-That snippet is historical bootstrap evidence, not the current `XAUForge.mq5` implementation.
-
-The current EA has progressed through lifecycle, strategy, symbol/account capability, and RiskManager phases while retaining the same verified repository-to-MT5 build path.
-
-The purpose of the original minimal target was to prove the development/build loop before trading behavior was introduced.
+A successful build verifies compiler acceptance; it does not replace the behavioral validation required by the roadmap.
 
 ## Command-Line Build
 
@@ -218,7 +205,7 @@ The compile gate is therefore stricter than merely checking whether an `.ex5` fi
 
 ## MetaEditor Process Exit Code
 
-With the verified MetaEditor build 6231, the process exit code did not reliably represent compilation success or failure during validation.
+In the recorded validation on MetaEditor build 6231, the process exit code did not reliably represent compilation success or failure.
 
 Observed behavior included:
 
@@ -273,9 +260,9 @@ After restoring the source, the same wrapper successfully rebuilt the project wi
 0 errors, 0 warnings
 ```
 
-The same compile gate continued to pass after the Phase 6 RiskManager implementation was merged.
+The full EA project also compiled with 0 errors and 0 warnings during the Phase 7 audit, as recorded in [Trade Manager validation evidence](trade-manager-validation.md).
 
-This verifies both the success path and the compile-failure rejection path while keeping the build workflow stable as the EA grows.
+These observations verify the build success path and compile-failure rejection path. They do not by themselves establish end-to-end trade lifecycle correctness or readiness for live trading.
 
 ## Development Workflow
 
